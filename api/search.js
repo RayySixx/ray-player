@@ -2,70 +2,67 @@
 export default async function handler(req, res) {
   try {
     const q = String(req.query.q || "").trim();
-    const page = Number(req.query.page || 1) || 1;
+    if (!q) return res.status(400).json({ success: false, message: "Missing q" });
 
-    if (!q) {
-      return res.status(400).json({ success: false, message: "Missing q" });
-    }
-
-    // Ambil dari list populer + fallback
-    // (Kalau satu mati, lanjut ke berikutnya)
-    const instances = [
-      "https://yewtu.be",
-      "https://invidious.fdn.fr",
-      "https://inv.nadeko.net",
-      "https://vid.puffyan.us"
+    // Piped API base URLs (fallback kalau satu down)
+    // Docs: base URL contoh official: https://pipedapi.kavin.rocks 2
+    const bases = [
+      "https://pipedapi.kavin.rocks",
+      "https://pipedapi.in.projectsegfau.lt",
+      "https://pipedapi.adminforge.de"
     ];
 
-    let lastError = null;
+    let lastErr = null;
 
-    for (const base of instances) {
-      const url =
-        `${base}/api/v1/search?` +
-        new URLSearchParams({
-          q,
-          page: String(page),
-          type: "video",
-          sort_by: "relevance" // ✅ penting: sort_by, bukan sort
-        }).toString();
-
-      // timeout per-attempt (biar gak ikut abort semua)
+    for (const base of bases) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 8000);
 
       try {
+        const url = `${base}/search?` + new URLSearchParams({
+          q,
+          filter: "videos" // biar fokus video
+        }).toString();
+
         const r = await fetch(url, {
           signal: controller.signal,
-          headers: {
-            "user-agent": "RayPlayer/1.0",
-            "accept": "application/json"
-          }
+          headers: { "accept": "application/json", "user-agent": "RayPlayer/1.0" }
         });
 
         clearTimeout(timer);
 
         if (!r.ok) {
-          const text = await r.text().catch(() => "");
-          lastError = `HTTP ${r.status} from ${base} :: ${text.slice(0, 120)}`;
+          const t = await r.text().catch(() => "");
+          lastErr = `HTTP ${r.status} from ${base} :: ${t.slice(0, 120)}`;
           continue;
         }
 
         const data = await r.json();
 
-        const items = (Array.isArray(data) ? data : [])
-          .filter((x) => x?.type === "video" && x?.videoId)
+        // Piped search response biasanya punya "items"
+        const itemsRaw = Array.isArray(data?.items) ? data.items : [];
+
+        const items = itemsRaw
+          .filter(x => (x?.type === "stream" || x?.type === "video") && (x?.url || x?.id))
           .slice(0, 12)
-          .map((x) => ({
-            videoId: x.videoId,
-            title: x.title || "Untitled",
-            author: x.author || "",
-            duration: Number(x.lengthSeconds || 0),
-            thumbnail:
-              (x.videoThumbnails || [])
-                .slice()
-                .sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url ||
-              `https://i.ytimg.com/vi/${x.videoId}/hqdefault.jpg`
-          }));
+          .map(x => {
+            // Piped kadang kasih url "/watch?v=xxxx"
+            const vid =
+              x.id ||
+              (typeof x.url === "string" ? (new URL("https://x.test" + x.url).searchParams.get("v")) : null) ||
+              "";
+
+            return {
+              videoId: vid,
+              title: x.title || "Untitled",
+              author: x.uploaderName || x.uploader || "",
+              duration: Number(x.duration || 0),
+              thumbnail:
+                x.thumbnail ||
+                `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`
+            };
+          })
+          .filter(x => x.videoId);
 
         return res.status(200).json({
           success: true,
@@ -73,18 +70,20 @@ export default async function handler(req, res) {
           query: q,
           items
         });
+
       } catch (e) {
         clearTimeout(timer);
-        lastError = `${base} failed: ${String(e?.message || e)}`;
+        lastErr = `${base} failed: ${String(e?.message || e)}`;
         continue;
       }
     }
 
     return res.status(502).json({
       success: false,
-      message: "All Invidious instances failed",
-      error: lastError
+      message: "All Piped instances failed",
+      error: lastErr
     });
+
   } catch (e) {
     return res.status(500).json({ success: false, error: String(e?.message || e) });
   }
