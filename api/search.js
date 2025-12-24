@@ -8,42 +8,50 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, message: "Missing q" });
     }
 
-    // Public Invidious instances (kadang ada yang down, jadi kita fallback)
+    // Ambil dari list populer + fallback
+    // (Kalau satu mati, lanjut ke berikutnya)
     const instances = [
       "https://yewtu.be",
-      "https://vid.puffyan.us",
       "https://invidious.fdn.fr",
       "https://inv.nadeko.net",
+      "https://vid.puffyan.us"
     ];
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    let lastError = null;
 
-    let lastErr = null;
     for (const base of instances) {
-      try {
-        const url =
-          `${base}/api/v1/search?` +
-          new URLSearchParams({
-            q,
-            page: String(page),
-            type: "video",
-            sort: "relevance",
-          }).toString();
+      const url =
+        `${base}/api/v1/search?` +
+        new URLSearchParams({
+          q,
+          page: String(page),
+          type: "video",
+          sort_by: "relevance" // ✅ penting: sort_by, bukan sort
+        }).toString();
 
+      // timeout per-attempt (biar gak ikut abort semua)
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8000);
+
+      try {
         const r = await fetch(url, {
           signal: controller.signal,
-          headers: { "user-agent": "RayPlayer/1.0" },
+          headers: {
+            "user-agent": "RayPlayer/1.0",
+            "accept": "application/json"
+          }
         });
 
+        clearTimeout(timer);
+
         if (!r.ok) {
-          lastErr = new Error(`HTTP ${r.status} from ${base}`);
+          const text = await r.text().catch(() => "");
+          lastError = `HTTP ${r.status} from ${base} :: ${text.slice(0, 120)}`;
           continue;
         }
 
         const data = await r.json();
 
-        // Normalisasi hasil supaya gampang dipakai frontend
         const items = (Array.isArray(data) ? data : [])
           .filter((x) => x?.type === "video" && x?.videoId)
           .slice(0, 12)
@@ -52,34 +60,32 @@ export default async function handler(req, res) {
             title: x.title || "Untitled",
             author: x.author || "",
             duration: Number(x.lengthSeconds || 0),
-            // pilih thumbnail terbaik yang ada
             thumbnail:
               (x.videoThumbnails || [])
                 .slice()
                 .sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url ||
-              `https://i.ytimg.com/vi/${x.videoId}/hqdefault.jpg`,
+              `https://i.ytimg.com/vi/${x.videoId}/hqdefault.jpg`
           }));
 
-        clearTimeout(timeout);
         return res.status(200).json({
           success: true,
           source: base,
           query: q,
-          items,
+          items
         });
       } catch (e) {
-        lastErr = e;
-        // coba instance berikutnya
+        clearTimeout(timer);
+        lastError = `${base} failed: ${String(e?.message || e)}`;
+        continue;
       }
     }
 
-    clearTimeout(timeout);
     return res.status(502).json({
       success: false,
       message: "All Invidious instances failed",
-      error: String(lastErr?.message || lastErr || "unknown"),
+      error: lastError
     });
   } catch (e) {
-    return res.status(500).json({ success: false, error: String(e) });
+    return res.status(500).json({ success: false, error: String(e?.message || e) });
   }
 }
