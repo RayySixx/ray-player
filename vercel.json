@@ -1,4 +1,10 @@
 {
-  "cleanUrls": true,
-  "rewrites": [{ "source": "/", "destination": "/index.html" }]
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/stream",
+      "destination": "/api/stream.js"
+    }
+  ]
 }
+
