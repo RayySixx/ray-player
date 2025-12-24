@@ -4,87 +4,85 @@ export default async function handler(req, res) {
     const q = String(req.query.q || "").trim();
     if (!q) return res.status(400).json({ success: false, message: "Missing q" });
 
-    // Piped API base URLs (fallback kalau satu down)
-    // Docs: base URL contoh official: https://pipedapi.kavin.rocks 2
-    const bases = [
-      "https://pipedapi.kavin.rocks",
-      "https://pipedapi.in.projectsegfau.lt",
-      "https://pipedapi.adminforge.de"
-    ];
-
-    let lastErr = null;
-
-    for (const base of bases) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-
-      try {
-        const url = `${base}/search?` + new URLSearchParams({
-          q,
-          filter: "videos" // biar fokus video
-        }).toString();
-
-        const r = await fetch(url, {
-          signal: controller.signal,
-          headers: { "accept": "application/json", "user-agent": "RayPlayer/1.0" }
-        });
-
-        clearTimeout(timer);
-
-        if (!r.ok) {
-          const t = await r.text().catch(() => "");
-          lastErr = `HTTP ${r.status} from ${base} :: ${t.slice(0, 120)}`;
-          continue;
-        }
-
-        const data = await r.json();
-
-        // Piped search response biasanya punya "items"
-        const itemsRaw = Array.isArray(data?.items) ? data.items : [];
-
-        const items = itemsRaw
-          .filter(x => (x?.type === "stream" || x?.type === "video") && (x?.url || x?.id))
-          .slice(0, 12)
-          .map(x => {
-            // Piped kadang kasih url "/watch?v=xxxx"
-            const vid =
-              x.id ||
-              (typeof x.url === "string" ? (new URL("https://x.test" + x.url).searchParams.get("v")) : null) ||
-              "";
-
-            return {
-              videoId: vid,
-              title: x.title || "Untitled",
-              author: x.uploaderName || x.uploader || "",
-              duration: Number(x.duration || 0),
-              thumbnail:
-                x.thumbnail ||
-                `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`
-            };
-          })
-          .filter(x => x.videoId);
-
-        return res.status(200).json({
-          success: true,
-          source: base,
-          query: q,
-          items
-        });
-
-      } catch (e) {
-        clearTimeout(timer);
-        lastErr = `${base} failed: ${String(e?.message || e)}`;
-        continue;
-      }
+    const key = process.env.YOUTUBE_API_KEY;
+    if (!key) {
+      return res.status(500).json({
+        success: false,
+        message: "Missing YOUTUBE_API_KEY env"
+      });
     }
 
-    return res.status(502).json({
-      success: false,
-      message: "All Piped instances failed",
-      error: lastErr
-    });
+    // 1) Search: ambil 1 videoId
+    const searchUrl = "https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams({
+      key,
+      part: "snippet",
+      q,
+      type: "video",
+      maxResults: "1",
+      safeSearch: "none"
+    }).toString();
 
+    const sRes = await fetch(searchUrl);
+    const sJson = await sRes.json();
+
+    if (!sRes.ok) {
+      return res.status(500).json({ success: false, message: "YouTube search failed", error: sJson });
+    }
+
+    const item = sJson?.items?.[0];
+    const videoId = item?.id?.videoId;
+    if (!videoId) {
+      return res.status(404).json({ success: false, message: "No results" });
+    }
+
+    // 2) Videos: ambil duration + title + thumb yang lebih rapi
+    const vidUrl = "https://www.googleapis.com/youtube/v3/videos?" + new URLSearchParams({
+      key,
+      part: "snippet,contentDetails",
+      id: videoId
+    }).toString();
+
+    const vRes = await fetch(vidUrl);
+    const vJson = await vRes.json();
+
+    if (!vRes.ok) {
+      return res.status(500).json({ success: false, message: "YouTube videos failed", error: vJson });
+    }
+
+    const vItem = vJson?.items?.[0];
+    const title = vItem?.snippet?.title || item?.snippet?.title || "Unknown";
+    const thumbs = vItem?.snippet?.thumbnails || item?.snippet?.thumbnails || {};
+    const thumbnail =
+      thumbs?.maxres?.url ||
+      thumbs?.high?.url ||
+      thumbs?.medium?.url ||
+      thumbs?.default?.url ||
+      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+    const iso = vItem?.contentDetails?.duration || "PT0S";
+    const durationSeconds = parseISODurationToSeconds(iso);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        videoId,
+        title,
+        thumbnail,
+        duration: durationSeconds
+      }
+    });
   } catch (e) {
-    return res.status(500).json({ success: false, error: String(e?.message || e) });
+    return res.status(500).json({ success: false, message: "Server error", error: String(e?.message || e) });
   }
+}
+
+// PT#H#M#S -> detik
+function parseISODurationToSeconds(iso) {
+  // contoh: PT3M12S, PT1H2M5S
+  const m = String(iso).match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+  if (!m) return 0;
+  const h = Number(m[1] || 0);
+  const min = Number(m[2] || 0);
+  const s = Number(m[3] || 0);
+  return h * 3600 + min * 60 + s;
 }
