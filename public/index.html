@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ray Player • YouTube Audio (No API Key)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body{
+      font-family: Outfit, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:#050505;
+      color:#fff;
+    }
+    .glass-panel{
+      background: rgba(20, 20, 25, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    }
+    .modern-scroll::-webkit-scrollbar { width: 6px; }
+    .modern-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius:10px; }
+    .btn-primary{
+      background: linear-gradient(135deg, #0ea5e9, #2563eb);
+      box-shadow: 0 4px 15px rgba(14, 165, 233, 0.35);
+    }
+    .btn-primary:hover{ filter: brightness(1.1); }
+    .btn-action{
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .btn-action:hover{ background: rgba(255,255,255,0.12); }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center pt-8 pb-32 px-4">
+  <div class="w-full max-w-6xl">
+    <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+      <div class="text-center md:text-left">
+        <h1 class="text-5xl font-black tracking-tight">
+          <span class="bg-clip-text text-transparent bg-gradient-to-r from-sky-400 via-violet-400 to-fuchsia-400">𝐑𝐚𝐲</span>
+          <span class="text-white/90">Player</span>
+        </h1>
+        <p class="text-white/40 text-sm font-medium tracking-wide mt-1 uppercase">YouTube Audio • No API Key</p>
+      </div>
+      <div class="text-xs text-white/40">
+        Search via backend (Invidious), play via hidden YouTube IFrame.
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <!-- Left -->
+      <div class="lg:col-span-7 space-y-6">
+        <!-- Search -->
+        <div class="glass-panel p-2 rounded-2xl flex items-center gap-2">
+          <div class="pl-3 text-white/40"><i class="fas fa-search"></i></div>
+          <input id="searchInput" class="w-full bg-transparent outline-none px-2 py-4 text-lg"
+                 placeholder="Contoh: monolog" autocomplete="off" />
+          <button id="searchBtn" class="btn-primary px-6 py-3 rounded-xl font-bold" onclick="searchMusic()">
+            <span id="searchBtnText">Cari</span>
+          </button>
+        </div>
+
+        <!-- Results -->
+        <div id="resultContainer" class="glass-panel p-6 rounded-3xl hidden">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold flex items-center gap-2">
+              <i class="fas fa-list text-sky-400"></i> Hasil Pencarian
+            </h2>
+            <span id="resultMeta" class="text-xs text-white/40"></span>
+          </div>
+          <div id="resultsList" class="space-y-2 max-h-[420px] overflow-y-auto modern-scroll pr-2"></div>
+        </div>
+      </div>
+
+      <!-- Right: Playlist -->
+      <div class="lg:col-span-5">
+        <div class="glass-panel p-6 rounded-3xl h-[520px] flex flex-col relative">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h3 class="text-xl font-bold flex items-center gap-2">
+                <i class="fas fa-list-ul text-sky-400"></i> Playlist
+              </h3>
+              <p id="playlistMeta" class="text-xs text-white/40 mt-1">0 Tracks</p>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-action w-9 h-9 rounded-lg" title="Shuffle" onclick="shufflePlaylist()">
+                <i class="fas fa-random"></i>
+              </button>
+              <button class="btn-action w-9 h-9 rounded-lg border-red-500/20 text-red-300" title="Clear" onclick="clearPlaylist()">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="playlistList" class="flex-1 overflow-y-auto modern-scroll space-y-2 pr-2"></div>
+
+          <div id="playlistEmpty" class="absolute inset-0 flex flex-col items-center justify-center text-white/30 pointer-events-none">
+            <i class="fas fa-compact-disc text-5xl mb-3 opacity-20"></i>
+            <p class="text-sm">Playlist kosong</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Player -->
+  <div id="playerControl" class="fixed bottom-6 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-[95%] max-w-4xl translate-y-[150%] transition-transform duration-500 z-50">
+    <div class="glass-panel p-4 rounded-[2rem] flex items-center gap-4">
+      <img id="miniThumb" class="w-16 h-16 rounded-full object-cover border border-white/10" />
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div id="miniTitle" class="font-bold text-lg truncate">Ready</div>
+            <div class="text-xs text-white/40">
+              <span id="statusText">Idle</span>
+              <span class="mx-2">•</span>
+              <span id="timeText">0:00 / 0:00</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn-action w-10 h-10 rounded-full" onclick="prevTrack()"><i class="fas fa-step-backward"></i></button>
+            <button id="toggleBtn" class="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center" onclick="togglePlay()">
+              <i class="fas fa-play ml-1 text-xl"></i>
+            </button>
+            <button class="btn-action w-10 h-10 rounded-full" onclick="nextTrack()"><i class="fas fa-step-forward"></i></button>
+          </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-3">
+          <input id="seekBar" type="range" min="0" max="100" value="0" class="w-full">
+          <input id="volBar" type="range" min="0" max="100" value="100" class="w-28">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden YouTube Player -->
+  <div id="ytWrap" class="fixed -left-[9999px] -top-[9999px] w-[1px] h-[1px] overflow-hidden">
+    <div id="ytplayer"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toastWrap" class="fixed top-6 left-0 right-0 flex flex-col items-center gap-2 pointer-events-none z-[60]"></div>
+
+  <script>
+    // ===== Utils =====
+    const el = (id) => document.getElementById(id);
+    function toast(msg, type="info"){
+      const wrap = el("toastWrap");
+      const box = document.createElement("div");
+      let cls = "bg-slate-900/90 border-white/10 text-white";
+      let ic  = "fa-circle-info";
+      if(type==="success"){ cls="bg-emerald-900/90 border-emerald-500/30 text-emerald-100"; ic="fa-circle-check"; }
+      if(type==="error"){ cls="bg-rose-900/90 border-rose-500/30 text-rose-100"; ic="fa-triangle-exclamation"; }
+      box.className = `pointer-events-auto backdrop-blur-md border px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 ${cls}`;
+      box.innerHTML = `<i class="fas ${ic}"></i><span class="text-sm font-medium">${msg}</span>`;
+      wrap.appendChild(box);
+      setTimeout(()=>{ box.style.opacity="0"; box.style.transform="translateY(-10px)"; }, 2500);
+      setTimeout(()=> box.remove(), 2900);
+    }
+    function formatTime(s){
+      s = Math.max(0, Math.floor(Number(s)||0));
+      const m = Math.floor(s/60);
+      const r = s%60;
+      return `${m}:${String(r).padStart(2,"0")}`;
+    }
+
+    // ===== State =====
+    let searchResults = [];
+    let playlist = [];
+    let currentIndex = -1;
+    let isReadyYT = false;
+    let isPlaying = false;
+
+    // ===== Search =====
+    async function searchMusic(){
+      const q = el("searchInput").value.trim();
+      if(!q) return toast("Ketik kata kunci dulu (contoh: monolog).", "error");
+
+      el("searchBtn").disabled = true;
+      el("searchBtnText").innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+      try{
+        const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&page=1`);
+        const j = await r.json();
+
+        if(!j.success) throw new Error(j.message || "Search failed");
+
+        searchResults = j.items || [];
+        if(!searchResults.length){
+          el("resultContainer").classList.add("hidden");
+          toast("Hasil kosong. Coba kata kunci lain.", "info");
+          return;
+        }
+
+        el("resultContainer").classList.remove("hidden");
+        el("resultMeta").textContent = `${searchResults.length} hasil`;
+        renderResults();
+        toast(`Ditemukan ${searchResults.length} hasil`, "success");
+      }catch(e){
+        console.error(e);
+        toast("Gagal search (instance lagi down). Coba lagi ya.", "error");
+      }finally{
+        el("searchBtn").disabled = false;
+        el("searchBtnText").textContent = "Cari";
+      }
+    }
+
+    function renderResults(){
+      const wrap = el("resultsList");
+      wrap.innerHTML = "";
+
+      searchResults.forEach((t, i) => {
+        const div = document.createElement("div");
+        div.className = "flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 cursor-pointer";
+        div.onclick = () => playSingle(i);
+
+        div.innerHTML = `
+          <img src="${t.thumbnail}" class="w-12 h-12 rounded-lg object-cover border border-white/10">
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-sm truncate">${escapeHtml(t.title)}</div>
+            <div class="text-xs text-white/40 truncate">${escapeHtml(t.author)} • ${formatTime(t.duration)}</div>
+          </div>
+          <button class="btn-action px-3 py-2 rounded-lg text-xs font-bold" onclick="event.stopPropagation(); addToPlaylist(i);">
+            <i class="fas fa-plus mr-1"></i> Add
+          </button>
+        `;
+        wrap.appendChild(div);
+      });
+    }
+
+    function escapeHtml(str){
+      return String(str||"").replace(/[&<>"']/g, s => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[s]));
+    }
+
+    // ===== Playlist =====
+    function updatePlaylistMeta(){
+      el("playlistMeta").textContent = `${playlist.length} Tracks`;
+      el("playlistEmpty").classList.toggle("hidden", playlist.length > 0);
+    }
+
+    function renderPlaylist(){
+      const wrap = el("playlistList");
+      wrap.innerHTML = "";
+
+      playlist.forEach((t, i) => {
+        const active = (i === currentIndex);
+        const div = document.createElement("div");
+        div.className = `group flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${
+          active ? "bg-sky-500/20 border-sky-500/30" : "bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10"
+        }`;
+        div.onclick = () => playPlaylistIndex(i);
+
+        div.innerHTML = `
+          <img src="${t.thumbnail}" class="w-10 h-10 rounded-lg object-cover border border-white/10">
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-sm truncate ${active ? "text-sky-200" : ""}">${escapeHtml(t.title)}</div>
+            <div class="text-xs text-white/40">${formatTime(t.duration)}</div>
+          </div>
+          <button class="opacity-0 group-hover:opacity-100 btn-action w-9 h-9 rounded-full text-red-200"
+            onclick="event.stopPropagation(); removeFromPlaylist(${i});">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+        wrap.appendChild(div);
+      });
+
+      updatePlaylistMeta();
+    }
+
+    function addToPlaylist(resultIndex){
+      const t = searchResults[resultIndex];
+      if(!t) return;
+      if(playlist.some(x => x.videoId === t.videoId)) return toast("Udah ada di playlist.", "info");
+      playlist.push(t);
+      if(currentIndex === -1) currentIndex = 0;
+      renderPlaylist();
+      toast("Masuk playlist.", "success");
+    }
+
+    function removeFromPlaylist(i){
+      if(i<0 || i>=playlist.length) return;
+      const removingCurrent = (i === currentIndex);
+
+      playlist.splice(i,1);
+      if(!playlist.length){
+        currentIndex = -1;
+        renderPlaylist();
+        toast("Playlist kosong.", "info");
+        return;
+      }
+      if(i < currentIndex) currentIndex--;
+      if(currentIndex >= playlist.length) currentIndex = playlist.length-1;
+
+      renderPlaylist();
+      if(removingCurrent) playPlaylistIndex(currentIndex);
+    }
+
+    function clearPlaylist(){
+      if(!playlist.length) return;
+      if(!confirm("Hapus semua playlist?")) return;
+      playlist = [];
+      currentIndex = -1;
+      renderPlaylist();
+      toast("Playlist dibersihin.", "success");
+    }
+
+    function shufflePlaylist(){
+      if(playlist.length < 2) return toast("Minimal 2 lagu buat shuffle.", "info");
+      const cur = playlist[currentIndex]?.videoId;
+      for(let i=playlist.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [playlist[i], playlist[j]] = [playlist[j], playlist[i]];
+      }
+      if(cur) currentIndex = playlist.findIndex(x => x.videoId === cur);
+      renderPlaylist();
+      toast("Playlist diacak.", "success");
+    }
+
+    // ===== Playback (YouTube IFrame hidden) =====
+    let player = null;
+    let tickTimer = null;
+
+    function showPlayer(){
+      el("playerControl").classList.remove("translate-y-[150%]");
+    }
+
+    function setNowPlayingUI(t){
+      el("miniThumb").src = t.thumbnail;
+      el("miniTitle").textContent = t.title;
+      el("statusText").textContent = "Loading...";
+      el("timeText").textContent = `0:00 / ${formatTime(t.duration)}`;
+      el("seekBar").value = 0;
+      showPlayer();
+    }
+
+    function playSingle(resultIndex){
+      const t = searchResults[resultIndex];
+      if(!t) return;
+      currentIndex = -1; // not in playlist mode
+      startYT(t.videoId, t);
+    }
+
+    function playPlaylistIndex(i){
+      const t = playlist[i];
+      if(!t) return;
+      currentIndex = i;
+      renderPlaylist();
+      startYT(t.videoId, t);
+    }
+
+    function startYT(videoId, track){
+      if(!isReadyYT || !player){
+        toast("YouTube player belum siap, tunggu dikit lalu coba lagi.", "info");
+        return;
+      }
+      setNowPlayingUI(track);
+
+      player.loadVideoById({ videoId, startSeconds: 0 });
+      // audio-only: videonya kita hide (player ada di luar layar), audio tetep jalan
+      player.setVolume(Number(el("volBar").value || 100));
+      player.playVideo();
+
+      el("toggleBtn").innerHTML = '<i class="fas fa-pause text-xl"></i>';
+      isPlaying = true;
+
+      // update seek/time
+      if(tickTimer) clearInterval(tickTimer);
+      tickTimer = setInterval(()=>{
+        const dur = player.getDuration ? player.getDuration() : 0;
+        const cur = player.getCurrentTime ? player.getCurrentTime() : 0;
+        if(dur > 0){
+          const pct = (cur/dur)*100;
+          el("seekBar").value = pct;
+          el("timeText").textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+        }
+      }, 350);
+    }
+
+    function togglePlay(){
+      if(!player) return;
+      const st = player.getPlayerState();
+      // 1 playing, 2 paused
+      if(st === 1){
+        player.pauseVideo();
+      }else{
+        player.playVideo();
+      }
+    }
+
+    function nextTrack(){
+      if(!playlist.length) return toast("Playlist kosong.", "info");
+      if(currentIndex === -1){
+        currentIndex = 0;
+      }else{
+        currentIndex = Math.min(playlist.length-1, currentIndex+1);
+      }
+      playPlaylistIndex(currentIndex);
+    }
+
+    function prevTrack(){
+      if(!playlist.length) return toast("Playlist kosong.", "info");
+      if(currentIndex === -1) currentIndex = 0;
+      currentIndex = Math.max(0, currentIndex-1);
+      playPlaylistIndex(currentIndex);
+    }
+
+    // seek & volume controls
+    el("seekBar").addEventListener("input", ()=>{
+      if(!player) return;
+      const dur = player.getDuration ? player.getDuration() : 0;
+      if(dur <= 0) return;
+      const pct = Number(el("seekBar").value || 0);
+      const t = (pct/100)*dur;
+      player.seekTo(t, true);
+    });
+
+    el("volBar").addEventListener("input", ()=>{
+      if(!player) return;
+      player.setVolume(Number(el("volBar").value || 100));
+    });
+
+    el("searchInput").addEventListener("keypress", (e)=>{
+      if(e.key === "Enter") searchMusic();
+    });
+
+    // ===== Load YouTube IFrame API =====
+    function loadYT(){
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+    }
+
+    window.onYouTubeIframeAPIReady = function(){
+      player = new YT.Player("ytplayer", {
+        height: "1",
+        width: "1",
+        videoId: "",
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+          rel: 0,
+          playsinline: 1
+        },
+        events: {
+          onReady: () => {
+            isReadyYT = true;
+            el("statusText").textContent = "Ready";
+            toast("Player ready.", "success");
+          },
+          onStateChange: (ev) => {
+            // 1 playing, 2 paused, 0 ended
+            if(ev.data === 1){
+              el("statusText").textContent = "Playing";
+              el("toggleBtn").innerHTML = '<i class="fas fa-pause text-xl"></i>';
+              isPlaying = true;
+            } else if(ev.data === 2){
+              el("statusText").textContent = "Paused";
+              el("toggleBtn").innerHTML = '<i class="fas fa-play ml-1 text-xl"></i>';
+              isPlaying = false;
+            } else if(ev.data === 0){
+              el("statusText").textContent = "Ended";
+              el("toggleBtn").innerHTML = '<i class="fas fa-play ml-1 text-xl"></i>';
+              isPlaying = false;
+              // auto next kalau lagi mode playlist
+              if(currentIndex >= 0 && playlist.length){
+                const next = currentIndex + 1;
+                if(next < playlist.length) playPlaylistIndex(next);
+              }
+            }
+          },
+          onError: () => {
+            toast("Video error / diblokir. Coba pilih hasil lain.", "error");
+          }
+        }
+      });
+    };
+
+    // init
+    renderPlaylist();
+    loadYT();
+  </script>
+</body>
+</html>
