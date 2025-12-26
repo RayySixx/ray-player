@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ray Player</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    :root { --sp-green:#1DB954; }
+    body{ background:#000; color:#fff; font-family:'Plus Jakarta Sans',sans-serif; overflow:hidden; }
+
+    #sidebar{ width:280px; transition:.25s; background:#000; border-right:1px solid #222; }
+    #sidebar.hidden-mode{ width:0; padding:0; opacity:0; pointer-events:none; transform:translateX(-20px); }
+
+    .search-input{ background:#242424!important; color:#fff!important; border:1px solid transparent; }
+    .search-input::placeholder{ color:#888; }
+    .search-input:focus{ background:#2a2a2a!important; border-color:#555; }
+
+    #toast{
+      position:fixed; top:18px; left:50%; transform:translate(-50%,-160%);
+      background:var(--sp-green); color:#000; padding:12px 16px;
+      border-radius:999px; font-weight:800; transition:.25s; z-index:9999;
+      box-shadow:0 18px 50px rgba(0,0,0,.45);
+      max-width:min(92vw,720px); text-align:center;
+    }
+    #toast.active{ transform:translate(-50%,0); }
+
+    main{ padding-bottom:190px!important; }
+
+    .music-card{
+      background:#181818; border:1px solid rgba(255,255,255,.06);
+      border-radius:16px; padding:14px; cursor:pointer; transition:.2s;
+      position: relative;
+    }
+    .music-card:hover{ background:#242424; transform:translateY(-4px); }
+
+    .card-plus{
+      position:absolute; top:10px; right:10px;
+      width:34px; height:34px;
+      border-radius:999px;
+      background: rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.18);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff;
+      transition:.15s;
+      z-index: 5;
+    }
+    .card-plus:hover{ transform:scale(1.06); background: rgba(0,0,0,.70); }
+    .card-plus.added{ background: rgba(29,185,84,.22); border-color: rgba(29,185,84,.55); color: #b9ffcf; }
+
+    /* Player bar */
+    #playerBar{
+      position:fixed; left:12px; right:12px; bottom:12px;
+      height:110px; padding:12px 14px;
+      background:rgba(18,18,18,.92);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:18px;
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+      box-shadow:0 24px 70px rgba(0,0,0,.55);
+      display:none; align-items:center; gap:12px; z-index:1000;
+    }
+    #playerBar.active{ display:flex; }
+
+    .song-info{ flex:1; min-width:0; display:flex; align-items:center; gap:12px; cursor:pointer; }
+    .controls{ flex:2; min-width:0; display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .rightzone{ flex:1; min-width:0; display:flex; justify-content:flex-end; align-items:center; gap:10px; }
+
+    .icon-btn{ color:#9ca3af; transition:.15s; }
+    .icon-btn:hover{ color:#fff; transform:translateY(-1px); }
+
+    #playBtn{
+      width:44px; height:44px; border-radius:999px;
+      background:#fff; color:#000;
+      display:flex; align-items:center; justify-content:center;
+      transition:.15s; box-shadow:0 18px 40px rgba(0,0,0,.45);
+    }
+    #playBtn:hover{ transform:scale(1.08); }
+
+    .progress-bg{
+      width:100%; max-width:560px; height:6px;
+      background:rgba(255,255,255,.12);
+      border-radius:999px; overflow:hidden; cursor:pointer;
+    }
+    #progressFill{ height:100%; width:0%; background:var(--sp-green); border-radius:999px; }
+
+    .pill{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      padding:8px 10px;
+      border-radius: 999px;
+      display:flex; align-items:center; gap:8px;
+      transition:.15s;
+    }
+    .pill:hover{ background: rgba(255,255,255,.10); }
+
+    /* Marquee title */
+    .marquee {
+      position: relative;
+      overflow: hidden;
+      white-space: nowrap;
+      mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+    }
+    .marquee > .marquee-inner{
+      display: inline-block;
+      padding-left: 0;
+      animation: marquee 10s linear infinite;
+    }
+    .marquee.paused > .marquee-inner { animation-play-state: paused; }
+    @keyframes marquee{
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* Modal */
+    #npModal{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 2000;
+      padding: 18px;
+    }
+    #npModal.active{ display:flex; }
+
+    .npCard{
+      width: min(720px, 100%);
+      background: rgba(18,18,18,.95);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 22px;
+      box-shadow: 0 30px 90px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .npHeader{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .npBody{ padding: 16px; display:grid; gap:14px; }
+    .npCover{
+      width: 100%;
+      aspect-ratio: 1/1;
+      background:#0b0b0b;
+      border-radius: 18px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .npCover img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .npTitle{ font-weight: 900; font-size: 18px; line-height: 1.15; }
+    .npArtist{ color:#a1a1aa; font-size: 13px; margin-top: 6px; }
+    .npControls{
+      display:flex; align-items:center; justify-content:center; gap:18px; padding-top: 6px;
+    }
+    .npBigPlay{
+      width: 64px; height: 64px; border-radius: 999px;
+      background:#fff; color:#000;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      transition: .15s;
+    }
+    .npBigPlay:hover{ transform: scale(1.06); }
+
+    /* hide iframe */
+    #ytWrap{
+      position:fixed; width:1px; height:1px; left:-9999px; top:-9999px; overflow:hidden;
+    }
+
+    @media (max-width:768px){
+      #sidebar{ position:absolute; height:100%; z-index:2100; }
+      #playerBar{ left:10px; right:10px; bottom:10px; height:118px; padding:12px; }
+      .rightzone{ display:none; }
+      .controls{ flex:3; }
+    }
+  </style>
+</head>
+
+<body class="flex">
+  <div id="toast">Ray Player siap.</div>
+
+  <aside id="sidebar" class="flex flex-col h-screen p-5 shrink-0">
+    <div class="flex items-center gap-3 mb-10 cursor-pointer" onclick="toggleSidebar()">
+      <i class="fab fa-spotify text-3xl text-green-500"></i>
+      <span class="text-xl font-extrabold tracking-tighter">RayPlayer</span>
+    </div>
+
+    <nav class="space-y-4">
+      <div class="flex items-center gap-4 text-gray-400 hover:text-white transition font-bold cursor-pointer">
+        <i class="fas fa-home text-xl"></i> Home
+      </div>
+      <div class="flex items-center gap-4 text-gray-400 hover:text-white transition font-bold cursor-pointer"
+           onclick="document.getElementById('searchInput').focus()">
+        <i class="fas fa-search text-xl"></i> Search
+      </div>
+    </nav>
+
+    <!-- PLAYLIST -->
+    <div class="mt-10 overflow-hidden">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Playlist</p>
+
+        <div class="flex items-center gap-2">
+          <button class="p-2 rounded-full hover:bg-white/10 transition" onclick="toggleShuffle()" title="Shuffle">
+            <i id="plShuffleIcon" class="fas fa-shuffle text-xs text-gray-400"></i>
+          </button>
+
+          <button class="p-2 rounded-full hover:bg-white/10 transition" onclick="cycleRepeatMode()" title="Repeat Mode">
+            <i id="plRepeatIcon" class="fas fa-repeat text-xs text-gray-400"></i>
+          </button>
+
+          <button class="p-2 rounded-full hover:bg-white/10 transition" onclick="clearPlaylist()" title="Clear">
+            <i class="fas fa-trash text-xs text-gray-400"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="plList" class="space-y-2 overflow-y-auto max-h-[52vh] pr-1"></div>
+      <div id="plEmpty" class="text-xs text-gray-600 mt-2 hidden">Tidak ada Playlist</div>
+    </div>
+  </aside>
+
+  <main class="flex-1 h-screen overflow-y-auto bg-gradient-to-b from-[#1e1e1e] to-black p-5 lg:p-10">
+    <header class="flex items-center gap-4 mb-10">
+      <button onclick="toggleSidebar()" class="p-2 hover:bg-white/10 rounded-full transition">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <div class="flex-1 max-w-xl relative">
+        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+        <input id="searchInput" type="text" placeholder="Cari lagu apa hari ini?"
+               class="search-input w-full py-3 pl-12 pr-4 rounded-full outline-none" />
+      </div>
+
+      <button onclick="searchMusic()" class="bg-white text-black px-6 py-3 rounded-full font-extrabold hover:scale-105 transition">
+        Search
+      </button>
+    </header>
+
+    <div class="flex items-end justify-between mb-6">
+      <h2 class="text-2xl font-extrabold">Trending Music</h2>
+      <div class="text-xs text-gray-400"></div>
+    </div>
+
+    <div id="grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6"></div>
+  </main>
+
+  <!-- Mini Player -->
+  <footer id="playerBar">
+    <div class="song-info" onclick="openNowPlaying()">
+      <img id="pImg" src="" class="w-14 h-14 rounded-xl object-cover shadow-lg border border-white/5" />
+      <div class="min-w-0 w-full">
+        <div id="pTitleWrap" class="marquee paused">
+          <div id="pTitleInner" class="marquee-inner">
+            <span id="pTitle" class="text-sm font-extrabold">Pilih Lagu</span>
+            <span class="mx-6 opacity-50">•</span>
+            <span id="pTitleDup" class="text-sm font-extrabold">Pilih Lagu</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mt-1">
+          <div id="pArtist" class="text-xs text-gray-400 truncate"></div>
+          <span id="pDur" class="text-[10px] text-gray-500 font-mono"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls" onclick="event.stopPropagation()">
+      <div class="flex items-center gap-6">
+        <button onclick="prev()" class="icon-btn" title="Prev"><i class="fas fa-step-backward text-xl"></i></button>
+
+        <button id="playBtn" onclick="togglePlay()" title="Play/Pause">
+          <i class="fas fa-play ml-0.5"></i>
+        </button>
+
+        <button onclick="next()" class="icon-btn" title="Next"><i class="fas fa-step-forward text-xl"></i></button>
+
+        <button onclick="cycleRepeatMode()" id="repBtn" class="icon-btn" title="Repeat Mode">
+          <i class="fas fa-repeat"></i>
+        </button>
+
+        <button onclick="toggleShuffle()" id="shufBtn" class="icon-btn" title="Shuffle">
+          <i class="fas fa-shuffle"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center w-full gap-3">
+        <span id="curT" class="text-[10px] text-gray-400 w-10 text-right font-mono">0:00</span>
+        <div class="progress-bg flex-1" onclick="seek(event)">
+          <div id="progressFill"></div>
+        </div>
+        <span id="durT" class="text-[10px] text-gray-400 w-10 font-mono">0:00</span>
+      </div>
+    </div>
+
+    <div class="rightzone" onclick="event.stopPropagation()">
+      <a id="openYT" class="pill text-xs text-gray-200" href="#" target="_blank" rel="noreferrer" title="Open on YouTube">
+        <i class="fab fa-youtube text-red-500"></i><span></span>
+      </a>
+
+      <div class="pill">
+        <i class="fas fa-volume-up text-gray-300"></i>
+        <input id="vol" type="range" min="0" max="100" step="1" value="100"
+               class="w-24 accent-green-500 cursor-pointer" />
+      </div>
+    </div>
+  </footer>
+
+  <!-- Now Playing Modal -->
+  <div id="npModal" onclick="closeNowPlaying()">
+    <div class="npCard" onclick="event.stopPropagation()">
+      <div class="npHeader">
+        <div class="text-sm font-extrabold text-white/90">Now Playing</div>
+        <button class="p-2 rounded-full hover:bg-white/10 transition" onclick="closeNowPlaying()">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="npBody">
+        <div class="npCover">
+          <img id="npImg" src="" alt="cover" />
+        </div>
+
+        <div>
+          <div id="npTitle" class="npTitle">Pilih Lagu</div>
+          <div id="npArtist" class="npArtist"></div>
+        </div>
+
+        <div class="flex items-center w-full gap-3">
+          <span id="npCur" class="text-[11px] text-gray-400 w-12 text-right font-mono">0:00</span>
+          <div class="progress-bg flex-1" onclick="npSeek(event)">
+            <div id="npProgressFill" style="height:100%; width:0%; background:var(--sp-green); border-radius:999px;"></div>
+          </div>
+          <span id="npDur" class="text-[11px] text-gray-400 w-12 font-mono">0:00</span>
+        </div>
+
+        <div class="npControls">
+          <button onclick="toggleShuffle()" class="icon-btn" title="Shuffle">
+            <i class="fas fa-shuffle"></i>
+          </button>
+
+          <button onclick="prev()" class="icon-btn" title="Prev">
+            <i class="fas fa-backward-step text-xl"></i>
+          </button>
+
+          <button class="npBigPlay" onclick="togglePlay()" title="Play/Pause">
+            <i id="npPlayIcon" class="fas fa-play ml-0.5"></i>
+          </button>
+
+          <button onclick="next()" class="icon-btn" title="Next">
+            <i class="fas fa-forward-step text-xl"></i>
+          </button>
+
+          <button onclick="cycleRepeatMode()" id="npRepBtn" class="icon-btn" title="Repeat Mode">
+            <i class="fas fa-repeat"></i>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between gap-3">
+          <a id="npOpenYT" class="pill text-xs text-gray-200" href="#" target="_blank" rel="noreferrer">
+            <i class="fab fa-youtube text-red-500"></i><span>Open on YouTube</span>
+          </a>
+
+          <div class="pill">
+            <i class="fas fa-volume-high text-gray-300"></i>
+            <input id="npVol" type="range" min="0" max="100" step="1" value="100"
+                   class="w-32 accent-green-500 cursor-pointer" />
+          </div>
+        </div>
+
+        <div id="modeHint" class="text-[11px] text-gray-500"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden YouTube player -->
+  <div id="ytWrap"><div id="ytPlayer"></div></div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    // Search results
+    let results = [];
+
+    // Playlist (persistent)
+    let pl = []; // [{id,url,title,thumb,author,duration}]
+    let plIndex = -1;
+
+    // Playback source: 'playlist' | 'results'
+    let playSource = 'playlist';
+
+    // Modes
+    // repeatMode: 0 off, 1 repeat all, 2 repeat one
+    let repeatMode = 1;
+    let shuffleOn = false;
+
+    // Player
+    let player = null;
+    let progressTimer = null;
+    let nowTrack = null;
+
+    function showNotif(msg){
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('active');
+      setTimeout(() => t.classList.remove('active'), 2200);
+    }
+
+    function toggleSidebar(){
+      document.getElementById('sidebar').classList.toggle('hidden-mode');
+    }
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    // --- Marquee ---
+    function setMarquee(text){
+      const wrap = document.getElementById('pTitleWrap');
+      const main = document.getElementById('pTitle');
+      const dup  = document.getElementById('pTitleDup');
+      main.textContent = text || 'Pilih Lagu';
+      dup.textContent = text || 'Pilih Lagu';
+      requestAnimationFrame(() => {
+        const needs = (wrap.scrollWidth > wrap.clientWidth + 40);
+        wrap.classList.toggle('paused', !needs);
+      });
+    }
+
+    // --- Modal ---
+    function openNowPlaying(){
+      if (!nowTrack) return;
+      document.getElementById('npModal').classList.add('active');
+      updateModeHint();
+    }
+    function closeNowPlaying(){
+      document.getElementById('npModal').classList.remove('active');
+    }
+
+    // --- YouTube Ready ---
+    function onYouTubeIframeAPIReady(){
+      player = new YT.Player('ytPlayer', {
+        height: '1',
+        width: '1',
+        videoId: '',
+        playerVars: { autoplay: 0, controls: 0, rel: 0, modestbranding: 1, playsinline: 1 },
+        events: {
+          onReady: () => {
+            showNotif("Player siap.");
+            hydrateFromStorage();
+            wireVolume();
+          },
+          onStateChange: onPlayerStateChange
+        }
+      });
+    }
+
+    function wireVolume(){
+      document.getElementById('vol').addEventListener('input', (e) => player?.setVolume(Number(e.target.value)));
+      document.getElementById('npVol').addEventListener('input', (e) => {
+        const v = Number(e.target.value);
+        player?.setVolume(v);
+        document.getElementById('vol').value = String(v);
+      });
+    }
+
+    function onPlayerStateChange(e){
+      if (e.data === YT.PlayerState.PLAYING){
+        updatePlayIcons(true);
+        startProgress();
+        setMediaSessionPlaybackState('playing');
+      } else if (e.data === YT.PlayerState.PAUSED){
+        updatePlayIcons(false);
+        setMediaSessionPlaybackState('paused');
+      } else if (e.data === YT.PlayerState.ENDED){
+        handleEnded();
+      }
+    }
+
+    function handleEnded(){
+      // Repeat One
+      if (repeatMode === 2){
+        player.playVideo();
+        return;
+      }
+
+      // If playing from playlist: next according to mode
+      if (playSource === 'playlist' && pl.length){
+        // Repeat all or off: go next; if end and repeat all -> loop
+        if (shuffleOn){
+          playPlaylistRandom(true);
+          return;
+        } else {
+          if (plIndex < pl.length - 1){
+            playFromPlaylistIndex(plIndex + 1);
+          } else {
+            if (repeatMode === 1) playFromPlaylistIndex(0);
+            else updatePlayIcons(false);
+          }
+          return;
+        }
+      }
+
+      // If playing from results: just next within results if possible
+      if (playSource === 'results' && results.length){
+        if (shuffleOn){
+          const r = Math.floor(Math.random() * results.length);
+          playFromResultsIndex(r);
+        } else {
+          // move next
+          const cur = results.findIndex(x => x.id === nowTrack?.id);
+          const nxt = cur + 1;
+          if (nxt < results.length) playFromResultsIndex(nxt);
+          else if (repeatMode === 1) playFromResultsIndex(0);
+        }
+      }
+    }
+
+    // --- Search ---
+    async function searchMusic(){
+      const q = document.getElementById('searchInput').value.trim();
+      if(!q) return showNotif("Tulis judul lagu dulu!");
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = `<div class="col-span-full text-center py-20">
+        <i class="fas fa-spinner fa-spin text-4xl text-green-500"></i>
+      </div>`;
+
+      try{
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        results = data;
+        renderGrid();
+      }catch(e){
+        console.error(e);
+        showNotif("Gagal mencari lagu.");
+      }
+    }
+
+    function inPlaylist(id){
+      return pl.some(x => x.id === id);
+    }
+
+    function renderGrid(){
+      const grid = document.getElementById('grid');
+      if(!results.length){
+        grid.innerHTML = `<div class="col-span-full text-center py-20 text-gray-400">Tidak ada hasil.</div>`;
+        return;
+      }
+
+      grid.innerHTML = results.map((t, i) => {
+        const added = inPlaylist(t.id);
+        return `
+        <div class="music-card group" onclick="playFromResultsIndex(${i})">
+          <button class="card-plus ${added ? 'added' : ''}" title="Add ke Playlist"
+                  onclick="event.stopPropagation(); toggleAddToPlaylist(${i});">
+            <i class="fas ${added ? 'fa-check' : 'fa-plus'}"></i>
+          </button>
+
+          <div class="relative mb-3">
+            <img src="${t.thumb}" class="w-full aspect-square object-cover rounded-xl shadow-lg">
+            <div class="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition flex items-center justify-center rounded-xl">
+              <div class="w-11 h-11 bg-green-500 rounded-full flex items-center justify-center shadow-xl">
+                <i class="fas fa-play text-black"></i>
+              </div>
+            </div>
+          </div>
+          <div class="font-extrabold truncate text-sm">${escapeHtml(t.title)}</div>
+          <div class="flex items-center justify-between gap-2 mt-1">
+            <div class="text-xs text-gray-400 truncate">${escapeHtml(t.author)}</div>
+            <div class="text-[10px] text-gray-500 font-mono">${escapeHtml(t.duration || "")}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // --- Playlist ops ---
+    function savePlaylist(){
+      localStorage.setItem('ray_playlist', JSON.stringify(pl));
+      localStorage.setItem('ray_modes', JSON.stringify({ repeatMode, shuffleOn }));
+    }
+
+    function hydrateFromStorage(){
+      try{
+        pl = JSON.parse(localStorage.getItem('ray_playlist') || "[]") || [];
+      }catch{ pl = []; }
+
+      try{
+        const m = JSON.parse(localStorage.getItem('ray_modes') || "{}") || {};
+        repeatMode = typeof m.repeatMode === 'number' ? m.repeatMode : 1;
+        shuffleOn = !!m.shuffleOn;
+      }catch{}
+
+      renderPlaylist();
+      syncModeIcons();
+    }
+
+    function clearPlaylist(){
+      pl = [];
+      plIndex = -1;
+      savePlaylist();
+      renderPlaylist();
+      renderGrid();
+      showNotif("Playlist dibersihkan.");
+    }
+
+    function toggleAddToPlaylist(resultsIdx){
+      const t = results[resultsIdx];
+      if (!t) return;
+
+      const exists = inPlaylist(t.id);
+      if (exists){
+        pl = pl.filter(x => x.id !== t.id);
+        // adjust index if needed
+        if (plIndex >= pl.length) plIndex = pl.length - 1;
+        showNotif("Dihapus dari playlist.");
+      } else {
+        pl.push(t);
+        showNotif("Masuk playlist ✅");
+      }
+      savePlaylist();
+      renderPlaylist();
+      renderGrid();
+    }
+
+    function removeFromPlaylist(idx){
+      const t = pl[idx];
+      pl.splice(idx, 1);
+      if (plIndex === idx) plIndex = Math.min(plIndex, pl.length - 1);
+      if (plIndex > idx) plIndex -= 1;
+      savePlaylist();
+      renderPlaylist();
+      renderGrid();
+      showNotif(`Hapus: ${t?.title || ''}`);
+    }
+
+    function renderPlaylist(){
+      const box = document.getElementById('plList');
+      const empty = document.getElementById('plEmpty');
+      empty.classList.toggle('hidden', pl.length !== 0);
+
+      if (!pl.length){
+        box.innerHTML = "";
+        return;
+      }
+
+      box.innerHTML = pl.map((t, i) => `
+        <div class="group flex items-center gap-2 px-3 py-2 rounded-xl border border-white/5
+                    ${i===plIndex && playSource==='playlist' ? 'bg-white/10' : 'hover:bg-white/5'}">
+          <button class="flex-1 text-left min-w-0" onclick="playFromPlaylistIndex(${i})">
+            <div class="text-xs font-extrabold truncate">${escapeHtml(t.title)}</div>
+            <div class="text-[10px] text-gray-500 truncate mt-0.5">${escapeHtml(t.author)}</div>
+          </button>
+          <button class="opacity-0 group-hover:opacity-100 transition p-2 rounded-full hover:bg-white/10"
+                  title="Remove" onclick="removeFromPlaylist(${i})">
+            <i class="fas fa-xmark text-xs text-gray-400"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // --- Modes ---
+    function toggleShuffle(){
+      shuffleOn = !shuffleOn;
+      savePlaylist();
+      syncModeIcons();
+      showNotif(shuffleOn ? "Shuffle: ON" : "Shuffle: OFF");
+      updateModeHint();
+    }
+
+    function cycleRepeatMode(){
+      repeatMode = (repeatMode + 1) % 3; // 0 off, 1 all, 2 one
+      savePlaylist();
+      syncModeIcons();
+      showNotif(repeatMode === 0 ? "Repeat: OFF" : repeatMode === 1 ? "Repeat: ALL" : "Repeat: ONE");
+      updateModeHint();
+    }
+
+    function syncModeIcons(){
+      // sidebar icons
+      const sh = document.getElementById('plShuffleIcon');
+      const rp = document.getElementById('plRepeatIcon');
+
+      sh.classList.toggle('text-green-500', shuffleOn);
+      rp.classList.toggle('text-green-500', repeatMode !== 0);
+
+      // player bar icons
+      document.getElementById('shufBtn').classList.toggle('text-green-500', shuffleOn);
+
+      // repeat icon style (ONE gets badge-ish)
+      const repBtn = document.getElementById('repBtn');
+      repBtn.classList.toggle('text-green-500', repeatMode !== 0);
+
+      const npRep = document.getElementById('npRepBtn');
+      npRep.classList.toggle('text-green-500', repeatMode !== 0);
+
+      // swap repeat icon
+      const repIcon = repBtn.querySelector('i');
+      const npIcon = npRep.querySelector('i');
+      if (repeatMode === 2){
+        repIcon.className = "fas fa-repeat-1";
+        npIcon.className = "fas fa-repeat-1";
+        rp.className = "fas fa-repeat-1 text-xs " + (repeatMode !== 0 ? "text-green-500" : "text-gray-400");
+      } else {
+        repIcon.className = "fas fa-repeat";
+        npIcon.className = "fas fa-repeat";
+        rp.className = "fas fa-repeat text-xs " + (repeatMode !== 0 ? "text-green-500" : "text-gray-400");
+      }
+    }
+
+    function updateModeHint(){
+      const el = document.getElementById('modeHint');
+      const r = repeatMode === 0 ? "OFF" : repeatMode === 1 ? "ALL" : "ONE";
+      const s = shuffleOn ? "ON" : "OFF";
+      el.textContent = `Mode: Repeat ${r} • Shuffle ${s} • Source: ${playSource}`;
+    }
+
+    // --- Play from results / playlist ---
+    function playFromResultsIndex(i){
+      const t = results[i];
+      if (!t || !player) return showNotif("Player belum siap…");
+      playSource = 'results';
+      nowTrack = t;
+      plIndex = pl.findIndex(x => x.id === t.id); // highlight if exists
+      renderPlaylist();
+      startTrack(nowTrack);
+    }
+
+    function playFromPlaylistIndex(i){
+      const t = pl[i];
+      if (!t || !player) return showNotif("Player belum siap…");
+      playSource = 'playlist';
+      plIndex = i;
+      nowTrack = t;
+      renderPlaylist();
+      startTrack(nowTrack);
+    }
+
+    function playPlaylistRandom(fromEnded=false){
+      if (!pl.length) return;
+      playSource = 'playlist';
+      const r = Math.floor(Math.random() * pl.length);
+      plIndex = r;
+      nowTrack = pl[r];
+      renderPlaylist();
+      startTrack(nowTrack);
+      if (fromEnded) showNotif("Acak 🎲");
+    }
+
+    function startTrack(t){
+      // mini player ui
+      document.getElementById('playerBar').classList.add('active');
+      document.getElementById('pImg').src = t.thumb || '';
+      setMarquee(t.title || 'Untitled');
+      document.getElementById('pArtist').innerText = t.author || 'YouTube';
+      document.getElementById('pDur').innerText = t.duration ? `• ${t.duration}` : '';
+      document.getElementById('openYT').href = t.url || `https://www.youtube.com/watch?v=${t.id}`;
+
+      // modal ui
+      document.getElementById('npImg').src = t.thumb || '';
+      document.getElementById('npTitle').innerText = t.title || 'Untitled';
+      document.getElementById('npArtist').innerText = t.author || 'YouTube';
+      document.getElementById('npOpenYT').href = t.url || `https://www.youtube.com/watch?v=${t.id}`;
+
+      // loading icon
+      document.getElementById('playBtn').innerHTML = '<i class="fas fa-circle-notch fa-spin text-lg"></i>';
+      document.getElementById('npPlayIcon').className = 'fas fa-circle-notch fa-spin';
+
+      // play
+      player.loadVideoById(t.id);
+      player.setVolume(Number(document.getElementById('vol').value));
+
+      // media session
+      setMediaSessionMetadata(t);
+      setMediaSessionPlaybackState('playing');
+
+      showNotif("Memutar: " + (t.title || "Video"));
+      updateModeHint();
+    }
+
+    // --- Controls ---
+    function togglePlay(){
+      if(!player) return;
+      const st = player.getPlayerState();
+      if (st === YT.PlayerState.PLAYING) player.pauseVideo();
+      else player.playVideo();
+    }
+
+    function updatePlayIcons(isPlaying){
+      document.getElementById('playBtn').innerHTML = isPlaying
+        ? '<i class="fas fa-pause"></i>'
+        : '<i class="fas fa-play ml-0.5"></i>';
+
+      document.getElementById('npPlayIcon').className = isPlaying
+        ? 'fas fa-pause'
+        : 'fas fa-play ml-0.5';
+    }
+
+    function next(){
+      if (!nowTrack) return;
+
+      // If playlist active and has songs
+      if (playSource === 'playlist' && pl.length){
+        if (shuffleOn){
+          playPlaylistRandom();
+          return;
+        }
+        const nxt = plIndex + 1;
+        if (nxt < pl.length) playFromPlaylistIndex(nxt);
+        else if (repeatMode === 1) playFromPlaylistIndex(0);
+        else showNotif("Playlist selesai.");
+        return;
+      }
+
+      // Results
+      if (playSource === 'results' && results.length){
+        if (shuffleOn){
+          playFromResultsIndex(Math.floor(Math.random() * results.length));
+          return;
+        }
+        const cur = results.findIndex(x => x.id === nowTrack.id);
+        const nxt = cur + 1;
+        if (nxt < results.length) playFromResultsIndex(nxt);
+        else if (repeatMode === 1) playFromResultsIndex(0);
+        else showNotif("Hasil search selesai.");
+      }
+    }
+
+    function prev(){
+      if (!nowTrack) return;
+
+      if (playSource === 'playlist' && pl.length){
+        if (shuffleOn){
+          playPlaylistRandom();
+          return;
+        }
+        const prv = plIndex - 1;
+        if (prv >= 0) playFromPlaylistIndex(prv);
+        else if (repeatMode === 1) playFromPlaylistIndex(pl.length - 1);
+        else showNotif("Ini lagu pertama di playlist.");
+        return;
+      }
+
+      if (playSource === 'results' && results.length){
+        if (shuffleOn){
+          playFromResultsIndex(Math.floor(Math.random() * results.length));
+          return;
+        }
+        const cur = results.findIndex(x => x.id === nowTrack.id);
+        const prv = cur - 1;
+        if (prv >= 0) playFromResultsIndex(prv);
+        else if (repeatMode === 1) playFromResultsIndex(results.length - 1);
+        else showNotif("Ini hasil pertama.");
+      }
+    }
+
+    // Progress loop
+    function startProgress(){
+      stopProgress();
+      progressTimer = setInterval(() => {
+        if(!player) return;
+        const dur = player.getDuration?.() || 0;
+        const cur = player.getCurrentTime?.() || 0;
+
+        document.getElementById('curT').innerText = fmt(cur);
+        document.getElementById('durT').innerText = fmt(dur);
+        document.getElementById('progressFill').style.width = (dur ? (cur/dur)*100 : 0) + '%';
+
+        document.getElementById('npCur').innerText = fmt(cur);
+        document.getElementById('npDur').innerText = fmt(dur);
+        document.getElementById('npProgressFill').style.width = (dur ? (cur/dur)*100 : 0) + '%';
+      }, 350);
+    }
+    function stopProgress(){
+      if(progressTimer) clearInterval(progressTimer);
+      progressTimer = null;
+    }
+
+    function seek(e){
+      if(!player) return;
+      const dur = player.getDuration?.() || 0;
+      if(!dur) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      player.seekTo(Math.max(0, Math.min(dur, pct * dur)), true);
+    }
+    function npSeek(e){ seek(e); }
+
+    function fmt(s){
+      if(!s || !isFinite(s)) return "0:00";
+      const m = Math.floor(s/60), sc = Math.floor(s%60);
+      return `${m}:${sc < 10 ? '0' : ''}${sc}`;
+    }
+
+    // --- Media Session ---
+    function setMediaSessionMetadata(track){
+      if (!('mediaSession' in navigator) || !track) return;
+      try{
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.title || 'RayPlayer',
+          artist: track.author || 'YouTube',
+          album: 'RayPlayer',
+          artwork: [{ src: track.thumb || '', sizes: '512x512', type: 'image/jpeg' }]
+        });
+
+        navigator.mediaSession.setActionHandler('play', () => player?.playVideo());
+        navigator.mediaSession.setActionHandler('pause', () => player?.pauseVideo());
+        navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+        navigator.mediaSession.setActionHandler('nexttrack', () => next());
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (!player || !details || typeof details.seekTime !== 'number') return;
+          player.seekTo(details.seekTime, true);
+        });
+      }catch(_){}
+    }
+    function setMediaSessionPlaybackState(state){
+      if (!('mediaSession' in navigator)) return;
+      try{ navigator.mediaSession.playbackState = state; }catch(_){}
+    }
+
+    // --- Keyboard + inputs ---
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+      if (e.code === 'ArrowRight') next();
+      if (e.code === 'ArrowLeft') prev();
+      if (e.code === 'KeyR') cycleRepeatMode();
+      if (e.code === 'KeyS') toggleShuffle();
+      if (e.code === 'Escape') closeNowPlaying();
+    });
+
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if(e.key === 'Enter') searchMusic();
+    });
+
+    // Modal open on mini player
+    function openNowPlaying(){
+      if (!nowTrack) return;
+      document.getElementById('npModal').classList.add('active');
+      updateModeHint();
+    }
+    function closeNowPlaying(){
+      document.getElementById('npModal').classList.remove('active');
+    }
+
+  </script>
+</body>
+</html>
