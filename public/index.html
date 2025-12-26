@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ray Player • v11 Ultra</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    
+    body { background-color: #000; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; }
+
+    /* Sidebar logic */
+    #sidebar { width: 280px; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); border-right: 1px solid #222; background: #000; }
+    #sidebar.hidden-mode { width: 0; padding: 0; opacity: 0; pointer-events: none; transform: translateX(-30px); }
+
+    /* Search Bar Fix - Teks harus keliatan! */
+    .input-premium {
+        background: #242424 !important;
+        color: #ffffff !important;
+        border: 1px solid transparent;
+        transition: 0.3s;
+    }
+    .input-premium:focus { border-color: #1DB954; background: #2a2a2a !important; }
+
+    /* Toast Notification */
+    #toast {
+        position: fixed; top: 20px; left: 50%; transform: translate(-50%, -200%);
+        background: #1DB954; color: black; padding: 12px 28px; border-radius: 50px;
+        font-weight: 800; transition: 0.5s; z-index: 9999; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    #toast.active { transform: translate(-50%, 0); }
+
+    /* PLAYER BAR - ANTI TABRAKAN */
+    #playerBar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 100px; background: #121212; border-top: 1px solid #282828;
+      display: none; align-items: center; justify-content: space-between;
+      padding: 0 32px; z-index: 1000;
+    }
+    #playerBar.active { display: flex; }
+
+    .zona-kiri { width: 30%; display: flex; align-items: center; min-width: 0; }
+    .zona-tengah { width: 40%; display: flex; flex-direction: column; align-items: center; }
+    .zona-kanan { width: 30%; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+
+    .seek-bg { width: 100%; height: 4px; background: #3e3e3e; border-radius: 10px; cursor: pointer; position: relative; }
+    #seekFill { height: 100%; background: #1DB954; width: 0%; border-radius: 10px; }
+
+    .music-card { background: #181818; border-radius: 15px; padding: 16px; transition: 0.3s; cursor: pointer; }
+    .music-card:hover { background: #282828; transform: translateY(-8px); }
+
+    @media (max-width: 768px) {
+      .zona-kanan { display: none; }
+      .zona-kiri { width: 45%; }
+      .zona-tengah { width: 55%; }
+      #sidebar { position: absolute; height: 100%; z-index: 2000; }
+    }
+  </style>
+</head>
+<body class="flex">
+
+  <div id="toast">Notif</div>
+
+  <aside id="sidebar" class="flex flex-col h-screen p-6 shrink-0">
+    <div onclick="toggleSidebar()" class="flex items-center gap-3 mb-12 cursor-pointer hover:opacity-80 transition">
+      <i class="fab fa-spotify text-4xl text-green-500"></i>
+      <span class="text-2xl font-extrabold tracking-tight">RayPlayer</span>
+    </div>
+    <nav class="space-y-5">
+      <div class="flex items-center gap-5 text-gray-400 hover:text-white font-bold transition cursor-pointer">
+        <i class="fas fa-home text-xl"></i> Home
+      </div>
+      <div class="flex items-center gap-5 text-gray-400 hover:text-white font-bold transition cursor-pointer" onclick="document.getElementById('searchInput').focus()">
+        <i class="fas fa-search text-xl"></i> Search
+      </div>
+    </nav>
+    <div class="mt-12 flex-1 overflow-hidden">
+      <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Saved Library</p>
+      <div id="libList" class="space-y-3 overflow-y-auto max-h-[50vh]"></div>
+    </div>
+  </aside>
+
+  <main class="flex-1 h-screen overflow-y-auto bg-gradient-to-b from-[#1e1e1e] to-black p-6 lg:p-10 pb-40">
+    <header class="flex items-center gap-5 mb-12">
+      <button onclick="toggleSidebar()" class="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="flex-1 max-w-2xl relative">
+        <i class="fas fa-search absolute left-5 top-1/2 -translate-y-1/2 text-gray-400"></i>
+        <input id="searchInput" type="text" placeholder="Cari lagu kesukaanmu..." 
+               class="input-premium w-full py-4 pl-14 pr-6 rounded-full outline-none text-white font-semibold">
+      </div>
+      <button onclick="handleSearch()" class="bg-white text-black px-10 py-4 rounded-full font-bold hover:scale-105 active:scale-95 transition shadow-xl">Search</button>
+    </header>
+
+    <div id="musicGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-8">
+      </div>
+  </main>
+
+  <footer id="playerBar">
+    <div class="zona-kiri">
+      <img id="pImg" src="" class="w-16 h-16 rounded-lg object-cover mr-4 shadow-2xl">
+      <div class="min-w-0">
+        <div id="pTitle" class="text-sm font-bold truncate">Pilih Lagu...</div>
+        <div id="pArtist" class="text-[11px] text-gray-500 truncate">YouTube Stream</div>
+      </div>
+      <button onclick="addToLib()" class="ml-4 text-gray-500 hover:text-green-500 transition">
+        <i class="far fa-heart text-xl"></i>
+      </button>
+    </div>
+
+    <div class="zona-tengah">
+      <div class="flex items-center gap-8 mb-3">
+        <button onclick="prev()" class="text-gray-400 hover:text-white transition"><i class="fas fa-step-backward text-2xl"></i></button>
+        <button id="masterPlay" onclick="togglePlay()" class="w-12 h-12 bg-white text-black rounded-full flex items-center justify-center hover:scale-110 shadow-xl transition">
+          <i class="fas fa-play ml-0.5"></i>
+        </button>
+        <button onclick="next()" class="text-gray-400 hover:text-white transition"><i class="fas fa-step-forward text-2xl"></i></button>
+        <button onclick="toggleLoop()" id="loopBtn" class="text-gray-400 hover:text-green-500 transition"><i class="fas fa-redo"></i></button>
+      </div>
+      <div class="flex items-center w-full gap-4">
+        <span id="curT" class="text-[10px] text-gray-500 font-mono w-10 text-right">0:00</span>
+        <div class="seek-bg flex-1" onclick="handleSeek(event)">
+          <div id="seekFill"></div>
+        </div>
+        <span id="durT" class="text-[10px] text-gray-500 font-mono w-10">0:00</span>
+      </div>
+    </div>
+
+    <div class="zona-kanan">
+      <i class="fas fa-volume-up text-gray-500"></i>
+      <input id="volSlider" type="range" min="0" max="1" step="0.1" value="1" class="w-28 accent-green-500">
+    </div>
+  </footer>
+
+  <audio id="audio"></audio>
+
+  <script>
+    const audio = document.getElementById('audio');
+    let playlist = [];
+    let currentIndex = -1;
+    let isLoop = false;
+    let library = JSON.parse(localStorage.getItem('ray_v11_lib') || '[]');
+
+    function triggerToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('active');
+      setTimeout(() => t.classList.remove('active'), 3000);
+    }
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('hidden-mode'); }
+
+    async function handleSearch() {
+      const q = document.getElementById('searchInput').value;
+      if(!q) return triggerToast("Ketik lagunya dulu!");
+      const grid = document.getElementById('musicGrid');
+      grid.innerHTML = `<div class="col-span-full py-20 text-center"><i class="fas fa-circle-notch fa-spin text-5xl text-green-500"></i></div>`;
+      
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        playlist = await res.json();
+        grid.innerHTML = playlist.map((t, i) => `
+          <div class="music-card group" onclick="startPlay(${i})">
+            <div class="relative mb-4">
+              <img src="${t.thumb}" class="w-full aspect-square object-cover rounded-xl shadow-lg">
+              <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center rounded-xl">
+                <div class="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center shadow-2xl scale-75 group-hover:scale-100 transition">
+                  <i class="fas fa-play text-black text-xl"></i>
+                </div>
+              </div>
+            </div>
+            <div class="font-bold truncate text-sm">${t.title}</div>
+            <div class="text-xs text-gray-500 mt-1 truncate">${t.author}</div>
+          </div>
+        `).join('');
+      } catch (e) { triggerToast("Gagal cari lagu."); }
+    }
+
+    async function startPlay(i) {
+      currentIndex = i;
+      const t = playlist[i];
+      document.getElementById('pImg').src = t.thumb;
+      document.getElementById('pTitle').innerText = t.title;
+      document.getElementById('pArtist').innerText = t.author;
+      document.getElementById('playerBar').classList.add('active');
+      document.getElementById('masterPlay').innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+      try {
+        const res = await fetch(`/api/stream?id=${t.id}`);
+        const data = await res.json();
+        if(!data.url) throw new Error();
+        audio.src = data.url;
+        audio.play();
+        updateBtnUI(true);
+        triggerToast("Memutar: " + t.title);
+      } catch (e) {
+        triggerToast("Blokir YouTube! Coba lagu lain.");
+        updateBtnUI(false);
+      }
+    }
+
+    function togglePlay() {
+      if(!audio.src) return;
+      audio.paused ? (audio.play(), updateBtnUI(true)) : (audio.pause(), updateBtnUI(false));
+    }
+
+    function updateBtnUI(p) {
+      document.getElementById('masterPlay').innerHTML = p ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play ml-0.5"></i>';
+    }
+
+    audio.ontimeupdate = () => {
+      const pct = (audio.currentTime / audio.duration) * 100 || 0;
+      document.getElementById('seekFill').style.width = pct + '%';
+      document.getElementById('curT').innerText = fmt(audio.currentTime);
+      document.getElementById('durT').innerText = fmt(audio.duration);
+    };
+
+    function fmt(s) {
+      if(!s) return "0:00";
+      const m = Math.floor(s/60), sc = Math.floor(s%60);
+      return `${m}:${sc < 10 ? '0' : ''}${sc}`;
+    }
+
+    function handleSeek(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = pct * audio.duration;
+    }
+
+    function toggleLoop() {
+      isLoop = !isLoop;
+      document.getElementById('loopBtn').classList.toggle('text-green-500', isLoop);
+      triggerToast(isLoop ? "Loop Aktif" : "Loop Mati");
+    }
+
+    audio.onended = () => isLoop ? audio.play() : next();
+    function next() { if(currentIndex < playlist.length - 1) startPlay(currentIndex + 1); }
+    function prev() { if(currentIndex > 0) startPlay(currentIndex - 1); }
+
+    document.getElementById('volSlider').oninput = (e) => audio.volume = e.target.value;
+    document.getElementById('searchInput').onkeypress = (e) => e.key === 'Enter' && handleSearch();
+
+    function addToLib() {
+      if(currentIndex === -1) return;
+      const t = playlist[currentIndex];
+      if(!library.find(x => x.id === t.id)) {
+        library.push(t);
+        localStorage.setItem('ray_v11_lib', JSON.stringify(library));
+        renderLib();
+        triggerToast("Masuk Library! ❤️");
+      }
+    }
+
+    function renderLib() {
+      const l = document.getElementById('libList');
+      l.innerHTML = library.map((t, i) => `
+        <div onclick="playFromLib(${i})" class="flex items-center gap-3 p-2 hover:bg-white/5 rounded cursor-pointer transition">
+          <img src="${t.thumb}" class="w-8 h-8 rounded">
+          <p class="text-[11px] font-bold truncate text-gray-400">${t.title}</p>
+        </div>
+      `).join('');
+    }
+
+    function playFromLib(i) { playlist = library; startPlay(i); }
+    renderLib();
+  </script>
+</body>
+</html>
