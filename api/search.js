@@ -2,7 +2,7 @@ const yts = require("yt-search");
 
 /**
  * GET /api/search?q=...
- * Returns: [{ id, url, title, thumb, author, duration }]
+ * Return: [{ id, url, title, thumb, author, duration }]
  */
 module.exports = async (req, res) => {
   const q = (req.query?.q ? String(req.query.q) : "").trim();
@@ -13,10 +13,9 @@ module.exports = async (req, res) => {
 
     const results = (r.videos || []).slice(0, 24).map(v => {
       const id = v.videoId;
-      const url = `https://www.youtube.com/watch?v=${id}`;
       return {
         id,
-        url,               // ✅ ini link videonya
+        url: `https://www.youtube.com/watch?v=${id}`,
         title: v.title,
         thumb: v.thumbnail,
         author: v.author?.name || "YouTube",
@@ -27,7 +26,7 @@ module.exports = async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.status(200).json(results);
   } catch (e) {
-    console.error(e);
+    console.error("search error:", e);
     res.status(500).json({ error: "Search gagal" });
   }
 };
