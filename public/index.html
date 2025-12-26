@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ray Player • Pro v9</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    
+    :root { --sp-green: #1DB954; }
+    body { background-color: #000; color: #fff; font-family: 'Plus Jakarta Sans', sans-serif; overflow-x: hidden; }
+
+    /* Fix Sidebar */
+    #sidebar { width: 280px; transition: 0.3s; background: #000; border-right: 1px solid #222; }
+    #sidebar.hidden-mode { width: 0; padding: 0; opacity: 0; pointer-events: none; }
+
+    /* Search Input Fix */
+    .search-input { background: #242424; color: white !important; border: 1px solid transparent; }
+    .search-input:focus { background: #2a2a2a; border-color: #444; }
+
+    /* Toast Notification (Ganti Alert) */
+    #toast {
+      position: fixed; top: 20px; left: 50%; transform: translate(-50%, -150%);
+      background: var(--sp-green); color: black; padding: 12px 24px;
+      border-radius: 50px; font-weight: bold; transition: 0.4s; z-index: 9999;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    #toast.active { transform: translate(-50%, 0); }
+
+    /* PLAYER BAR FIXED LAYOUT */
+    #playerBar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: 90px; background: #121212; border-top: 1px solid #282828;
+      display: none; grid-template-columns: 1fr 1fr 1fr; align-items: center;
+      padding: 0 20px; z-index: 1000;
+    }
+    #playerBar.active { display: grid; }
+
+    /* Progress Bar */
+    .progress-bar-bg { width: 100%; height: 4px; background: #444; border-radius: 2px; cursor: pointer; position: relative; }
+    #progressFill { height: 100%; background: var(--sp-green); width: 0%; border-radius: 2px; }
+
+    .music-card { background: #181818; border-radius: 12px; transition: 0.3s; padding: 16px; cursor: pointer; }
+    .music-card:hover { background: #282828; transform: translateY(-5px); }
+
+    @media (max-width: 768px) {
+      #sidebar { position: absolute; height: 100%; z-index: 2000; }
+      #playerBar { grid-template-columns: 2fr 1fr; } /* Sembunyiin volume di HP biar gak tabrakan */
+      .volume-control { display: none; }
+    }
+  </style>
+</head>
+<body class="flex">
+
+  <div id="toast">Notifikasi Ray Player</div>
+
+  <aside id="sidebar" class="flex flex-col h-screen p-5 shrink-0">
+    <div class="flex items-center gap-3 mb-10 cursor-pointer" onclick="toggleSidebar()">
+      <i class="fab fa-spotify text-3xl text-green-500"></i>
+      <span class="text-xl font-extrabold tracking-tighter">RayPlayer</span>
+    </div>
+    <nav class="space-y-4">
+      <div class="flex items-center gap-4 text-gray-400 hover:text-white transition font-bold cursor-pointer">
+        <i class="fas fa-home text-xl"></i> Home
+      </div>
+      <div class="flex items-center gap-4 text-gray-400 hover:text-white transition font-bold cursor-pointer" onclick="document.getElementById('searchInput').focus()">
+        <i class="fas fa-search text-xl"></i> Search
+      </div>
+    </nav>
+    <div class="mt-10 overflow-hidden">
+      <p class="text-xs font-bold text-gray-500 uppercase mb-4 tracking-widest">Your Library</p>
+      <div id="libList" class="space-y-2"></div>
+    </div>
+  </aside>
+
+  <main class="flex-1 h-screen overflow-y-auto bg-gradient-to-b from-[#222] to-black p-5 lg:p-10 pb-32">
+    <header class="flex items-center gap-4 mb-10">
+      <button onclick="toggleSidebar()" class="p-2 hover:bg-white/10 rounded-full transition lg:hidden">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div class="flex-1 max-w-xl relative">
+        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+        <input id="searchInput" type="text" placeholder="Cari lagu apa hari ini?" 
+               class="search-input w-full py-3 pl-12 pr-4 rounded-full outline-none">
+      </div>
+      <button onclick="searchMusic()" class="bg-white text-black px-6 py-3 rounded-full font-bold hover:scale-105 transition">Search</button>
+    </header>
+
+    <h2 class="text-2xl font-bold mb-6">Trending Results</h2>
+    <div id="grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+      </div>
+  </main>
+
+  <footer id="playerBar">
+    <div class="flex items-center min-w-0 pr-4">
+      <img id="pImg" src="" class="w-14 h-14 rounded object-cover shadow-lg mr-4">
+      <div class="truncate">
+        <div id="pTitle" class="text-sm font-bold truncate">Pilih Lagu</div>
+        <div id="pArtist" class="text-xs text-gray-400 truncate mt-1">YouTube</div>
+      </div>
+    </div>
+
+    <div class="flex flex-col items-center">
+      <div class="flex items-center gap-5 mb-2">
+        <button onclick="prev()" class="text-gray-400 hover:text-white"><i class="fas fa-step-backward text-xl"></i></button>
+        <button id="playBtn" onclick="togglePlay()" class="w-10 h-10 bg-white text-black rounded-full flex items-center justify-center hover:scale-105">
+          <i class="fas fa-play ml-0.5"></i>
+        </button>
+        <button onclick="next()" class="text-gray-400 hover:text-white"><i class="fas fa-step-forward text-xl"></i></button>
+        <button onclick="toggleRepeat()" id="repBtn" class="text-gray-500 hover:text-green-500"><i class="fas fa-redo"></i></button>
+      </div>
+      <div class="flex items-center w-full gap-3">
+        <span id="curT" class="text-[10px] text-gray-500 w-8 text-right font-mono">0:00</span>
+        <div class="progress-bar-bg flex-1" onclick="seek(event)">
+          <div id="progressFill"></div>
+        </div>
+        <span id="durT" class="text-[10px] text-gray-500 w-8 font-mono">0:00</span>
+      </div>
+    </div>
+
+    <div class="volume-control flex items-center justify-end gap-3">
+      <i class="fas fa-volume-up text-gray-400"></i>
+      <input id="vol" type="range" min="0" max="1" step="0.1" value="1" class="w-24 accent-green-500">
+    </div>
+  </footer>
+
+  <audio id="audio"></audio>
+
+  <script>
+    const audio = document.getElementById('audio');
+    let playlist = [];
+    let currentIndex = -1;
+    let isRepeat = false;
+
+    // Custom Notif
+    function showNotif(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('active');
+      setTimeout(() => t.classList.remove('active'), 3000);
+    }
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('hidden-mode');
+    }
+
+    async function searchMusic() {
+      const q = document.getElementById('searchInput').value;
+      if(!q) return showNotif("Tulis judul lagu dulu!");
+      
+      const grid = document.getElementById('grid');
+      grid.innerHTML = `<div class="col-span-full text-center py-20"><i class="fas fa-spinner fa-spin text-4xl text-green-500"></i></div>`;
+      
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        playlist = await res.json();
+        renderGrid();
+      } catch (e) { showNotif("Gagal mencari lagu."); }
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = playlist.map((t, i) => `
+        <div class="music-card group" onclick="playSong(${i})">
+          <div class="relative mb-3">
+            <img src="${t.thumb}" class="w-full aspect-square object-cover rounded shadow-lg">
+            <div class="absolute bottom-2 right-2 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xl">
+              <i class="fas fa-play text-black"></i>
+            </div>
+          </div>
+          <div class="font-bold truncate text-sm">${t.title}</div>
+          <div class="text-xs text-gray-500 truncate mt-1">${t.author}</div>
+        </div>
+      `).join('');
+    }
+
+    async function playSong(i) {
+      currentIndex = i;
+      const t = playlist[i];
+      
+      document.getElementById('pImg').src = t.thumb;
+      document.getElementById('pTitle').innerText = t.title;
+      document.getElementById('pArtist').innerText = t.author;
+      document.getElementById('playerBar').classList.add('active');
+      document.getElementById('playBtn').innerHTML = '<i class="fas fa-circle-notch fa-spin text-lg"></i>';
+
+      try {
+        const res = await fetch(`/api/stream?id=${t.id}`);
+        const data = await res.json();
+        if(data.error) throw new Error(data.error);
+        
+        audio.src = data.url;
+        audio.play();
+        updateBtn(true);
+        showNotif("Memutar: " + t.title);
+      } catch (e) {
+        showNotif("Ke-blok YouTube. Coba lagu lain.");
+        updateBtn(false);
+      }
+    }
+
+    function togglePlay() {
+      if(!audio.src) return;
+      audio.paused ? (audio.play(), updateBtn(true)) : (audio.pause(), updateBtn(false));
+    }
+
+    function updateBtn(p) {
+      document.getElementById('playBtn').innerHTML = p ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play ml-0.5"></i>';
+    }
+
+    audio.ontimeupdate = () => {
+      const pct = (audio.currentTime / audio.duration) * 100 || 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('curT').innerText = fmt(audio.currentTime);
+      document.getElementById('durT').innerText = fmt(audio.duration);
+    };
+
+    function fmt(s) {
+      if(!s) return "0:00";
+      const m = Math.floor(s/60), sc = Math.floor(s%60);
+      return `${m}:${sc < 10 ? '0' : ''}${sc}`;
+    }
+
+    function seek(e) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = pct * audio.duration;
+    }
+
+    function toggleRepeat() {
+      isRepeat = !isRepeat;
+      document.getElementById('repBtn').classList.toggle('text-green-500', isRepeat);
+      showNotif(isRepeat ? "Loop Aktif" : "Loop Mati");
+    }
+
+    audio.onended = () => isRepeat ? audio.play() : next();
+
+    function next() { if(currentIndex < playlist.length - 1) playSong(currentIndex + 1); }
+    function prev() { if(currentIndex > 0) playSong(currentIndex - 1); }
+
+    document.getElementById('vol').oninput = (e) => audio.volume = e.target.value;
+    document.getElementById('searchInput').onkeypress = (e) => e.key === 'Enter' && searchMusic();
+  </script>
+</body>
+</html>
