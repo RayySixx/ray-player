@@ -1,7 +1,3 @@
-/* Ray Player Service Worker
-   - App shell caching for offline
-   - Network-first for API calls
-*/
 
 const VERSION = 'rayplayer-v2';
 const APP_SHELL = [
@@ -32,7 +28,6 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Biar navigasi tetap kebuka offline (SPA-ish)
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
@@ -48,7 +43,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API: network-first (biar search/stream selalu up to date)
+  
   if (url.pathname.startsWith('/api/')) {
     event.respondWith((async () => {
       try {
@@ -60,7 +55,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static: cache-first
+
   event.respondWith((async () => {
     const cached = await caches.match(req);
     if (cached) return cached;
