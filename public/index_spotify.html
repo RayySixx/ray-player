@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ray Player</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+<!-- ✅ PWA -->
+<link href="/manifest.json" rel="manifest"/>
+<meta content="#000000" name="theme-color"/>
+<link href="/icons/icon-192.png" rel="apple-touch-icon"/>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+    :root { --sp-green:#1DB954; }
+
+    body{
+      background:#000; color:#fff;
+      font-family:'Plus Jakarta Sans',sans-serif;
+      overflow:hidden;
+    }
+
+    #sidebar{ width:280px; transition:.25s; background:#000; border-right:1px solid #222; }
+    #sidebar.hidden-mode{ width:0; padding:0; opacity:0; pointer-events:none; transform:translateX(-20px); }
+
+    .search-input{ background:#242424!important; color:#fff!important; border:1px solid transparent; }
+    .search-input::placeholder{ color:#888; }
+    .search-input:focus{ background:#2a2a2a!important; border-color:#555; }
+
+    /* Toast */
+    #toast{
+      position:fixed; top:18px; left:50%;
+      transform:translate(-50%,-160%);
+      background:var(--sp-green); color:#000;
+      padding:10px 14px;
+      border-radius:999px;
+      font-weight:900;
+      transition:.25s;
+      z-index:9999;
+      box-shadow:0 18px 50px rgba(0,0,0,.45);
+      width:min(92vw,560px);
+      overflow:hidden;
+      white-space:nowrap;
+      display:flex; align-items:center; gap:10px;
+    }
+    #toast.active{ transform:translate(-50%,0); }
+    #toastText{ flex:1; overflow:hidden; }
+    #toastTextInner{
+      display:inline-block;
+      will-change: transform;
+      white-space:nowrap;
+    }
+
+    main{ padding-bottom:190px!important; }
+
+    .music-card{
+      background:#181818; border:1px solid rgba(255,255,255,.06);
+      border-radius:16px; padding:14px;
+      cursor:pointer; transition:.2s;
+      position: relative;
+    }
+    .music-card:hover{ background:#242424; transform:translateY(-4px); }
+
+    .card-plus{
+      position:absolute; top:10px; right:10px;
+      width:34px; height:34px;
+      border-radius:999px;
+      background: rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.18);
+      display:flex; align-items:center; justify-content:center;
+      color:#fff;
+      transition:.15s;
+      z-index: 5;
+    }
+    .card-plus:hover{ transform:scale(1.06); background: rgba(0,0,0,.70); }
+
+    /* Marquee */
+    .marquee {
+      position: relative;
+      overflow: hidden;
+      white-space: nowrap;
+      mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 12%, black 88%, transparent);
+    }
+    .marquee > .marquee-inner{
+      display: inline-flex;
+      align-items:center;
+      gap: 22px;
+      animation: marquee 10s linear infinite;
+      will-change: transform;
+    }
+    .marquee.paused > .marquee-inner { animation-play-state: paused; }
+    @keyframes marquee{ 0%{transform:translateX(0%)} 100%{transform:translateX(-50%)} }
+
+    /* Card title marquee */
+    .card-title-wrap{
+      margin-top: 2px;
+      font-weight: 900;
+      font-size: 14px;
+      line-height: 1.2;
+      min-height: 18px;
+    }
+
+    /* Player bar */
+    #playerBar{
+      position:fixed; left:12px; right:12px; bottom:12px;
+      height:112px; padding:12px 14px;
+      background:rgba(18,18,18,.92);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:18px;
+      backdrop-filter:blur(12px);
+      -webkit-backdrop-filter:blur(12px);
+      box-shadow:0 24px 70px rgba(0,0,0,.55);
+      display:none; align-items:center; gap:12px; z-index:1000;
+    }
+    #playerBar.active{ display:flex; }
+
+    .song-info{ flex:1; min-width:0; display:flex; align-items:center; gap:12px; cursor:pointer; }
+    .controls{ flex:2; min-width:0; display:flex; flex-direction:column; align-items:center; gap:8px; }
+    .rightzone{ flex:1; min-width:0; display:flex; justify-content:flex-end; align-items:center; gap:10px; }
+
+    .icon-btn{ color:#9ca3af; transition:.15s; }
+    .icon-btn:hover{ color:#fff; transform:translateY(-1px); }
+
+    #playBtn{
+      width:44px; height:44px; border-radius:999px;
+      background:#fff; color:#000;
+      display:flex; align-items:center; justify-content:center;
+      transition:.15s; box-shadow:0 18px 40px rgba(0,0,0,.45);
+    }
+    #playBtn:hover{ transform:scale(1.08); }
+
+    .progress-bg{
+      width:100%; max-width:560px; height:6px;
+      background:rgba(255,255,255,.12);
+      border-radius:999px; overflow:hidden; cursor:pointer;
+    }
+    #progressFill{ height:100%; width:0%; background:var(--sp-green); border-radius:999px; }
+
+    .pill{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      padding:8px 10px;
+      border-radius: 999px;
+      display:flex; align-items:center; gap:8px;
+      transition:.15s;
+      user-select:none;
+    }
+    .pill:hover{ background: rgba(255,255,255,.10); }
+
+    /* Mini video floating window (iframe) */
+    #miniVideoWrap{
+      position: fixed;
+      right: 14px;
+      bottom: 142px;
+      width: 280px;
+      height: 158px;
+      background: rgba(10,10,10,.92);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 18px;
+      box-shadow: 0 26px 80px rgba(0,0,0,.55);
+      overflow:hidden;
+      z-index: 2400;
+      display:none;
+      touch-action:none;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    #miniVideoWrap.active{ display:block; }
+
+    #miniTop{
+      height: 34px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 0 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      cursor: grab;
+    }
+    #miniTop:active{ cursor: grabbing; }
+
+    #miniBadge{
+      display:flex; align-items:center; gap:8px;
+      font-weight: 900;
+      font-size: 12px;
+      color: rgba(255,255,255,.92);
+      min-width:0;
+    }
+    #miniBadge i{ color: var(--sp-green); }
+    #miniTitleWrap{
+      flex:1;
+      min-width:0;
+      margin-left: 6px;
+    }
+
+    #miniTitleWrap .marquee{ mask-image:none; -webkit-mask-image:none; }
+    #miniTitleWrap .marquee-inner{ animation-duration: 9s; }
+
+    #miniBtns{
+      display:flex; align-items:center; gap:8px;
+    }
+    .miniBtn{
+      width:28px; height:28px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08);
+      transition:.15s;
+    }
+    .miniBtn:hover{ background: rgba(255,255,255,.10); }
+
+    #miniYtHost{
+      width: 100%;
+      height: calc(100% - 34px);
+      background: #000;
+    }
+
+    /* Hidden youtube container (default) */
+    #ytHiddenHost{
+      position:fixed; width:1px; height:1px; left:-9999px; top:-9999px; overflow:hidden;
+    }
+
+    /* Modal base */
+    .modal{
+      position: fixed; inset:0;
+      background: rgba(0,0,0,.65);
+      display:none;
+      align-items:flex-end; justify-content:center;
+      z-index:2500;
+      padding: 18px;
+    }
+    .modal.active{ display:flex; }
+
+    .modalCard{
+      width: min(720px, 100%);
+      background: rgba(18,18,18,.95);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 22px;
+      box-shadow: 0 30px 90px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .modalHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .modalBody{ padding: 16px; display:grid; gap:14px; }
+
+    /* Now Playing modal */
+    .npCover{
+      width: 100%; aspect-ratio: 1/1;
+      background:#0b0b0b; border-radius: 18px; overflow:hidden;
+      border:1px solid rgba(255,255,255,.08);
+    }
+    .npCover img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .npTitle{ font-weight: 900; font-size: 18px; line-height: 1.15; }
+    .npArtist{ color:#a1a1aa; font-size: 13px; margin-top: 6px; }
+    .npControls{ display:flex; align-items:center; justify-content:center; gap:18px; padding-top: 6px; }
+    .npBigPlay{
+      width: 64px; height: 64px; border-radius: 999px;
+      background:#fff; color:#000;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      transition: .15s;
+    }
+    .npBigPlay:hover{ transform: scale(1.06); }
+
+    /* Playlist cards */
+    .plCard{
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.04);
+      border-radius: 18px;
+      overflow:hidden;
+      transition:.18s;
+      cursor:pointer;
+    }
+    .plCard:hover{ background: rgba(255,255,255,.07); transform: translateY(-3px); }
+    .plCover{ width:100%; aspect-ratio: 1/1; background: #0b0b0b; overflow:hidden; }
+    .plCover img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .plMeta{ padding: 12px; }
+    .plName{ font-weight: 900; font-size: 14px; }
+    .plSub{ color:#a1a1aa; font-size: 11px; margin-top: 4px; }
+
+    /* Playlist detail header */
+    .hero{ display:flex; gap:16px; align-items:flex-end; padding: 10px 0 18px 0; }
+    .heroImg{
+      width: 160px; height: 160px;
+      border-radius: 22px;
+      overflow:hidden;
+      border: 1px solid rgba(255,255,255,.10);
+      background:#0b0b0b;
+      flex: none;
+    }
+    .heroImg img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .heroTitle{ font-size: 34px; font-weight: 950; line-height:1.05; }
+    .heroSub{ color:#a1a1aa; font-size: 12px; margin-top: 10px; }
+    .heroActions{ display:flex; gap:10px; margin-top: 14px; flex-wrap: wrap; }
+    .btn{
+      display:inline-flex; align-items:center; gap:10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      transition:.15s;
+      font-weight: 900;
+      font-size: 13px;
+    }
+    .btn:hover{ background: rgba(255,255,255,.10); transform: translateY(-1px); }
+    .btnPrimary{ background: var(--sp-green); color:#000; border-color: rgba(29,185,84,.55); }
+    .btnPrimary:hover{ background: #22c55e; }
+
+    /* song list row */
+    .row{
+      display:flex; align-items:center; gap:12px;
+      padding: 10px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.03);
+      transition:.15s;
+      cursor:pointer;
+    }
+    .row:hover{ background: rgba(255,255,255,.06); }
+    .rowImg{ width:44px; height:44px; border-radius: 12px; overflow:hidden; background:#0b0b0b; border:1px solid rgba(255,255,255,.08); }
+    .rowImg img{ width:100%; height:100%; object-fit:cover; }
+    .rowMain{ flex:1; min-width:0; }
+    .rowTitle{ font-weight: 900; font-size: 13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rowSub{ color:#a1a1aa; font-size: 11px; margin-top: 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rowRight{ display:flex; align-items:center; gap:10px; color:#9ca3af; }
+    .rowRight button{ padding:8px; border-radius: 999px; }
+    .rowRight button:hover{ background: rgba(255,255,255,.08); color:#fff; }
+
+    /* Info page */
+    .infoCard{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      border-radius: 22px;
+      padding: 18px;
+    }
+    .devAvatar{
+      width: 92px; height: 92px;
+      border-radius: 24px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.12);
+      background:#0b0b0b;
+      flex:none;
+    }
+    .devAvatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .linkBtn{
+      display:flex; align-items:center; gap:10px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      transition:.15s;
+      font-weight: 900;
+    }
+    .linkBtn:hover{ background: rgba(255,255,255,.10); transform: translateY(-1px); }
+
+    @media (max-width:768px){
+      #sidebar{ position:absolute; height:100%; z-index:2100; }
+      #playerBar{ left:10px; right:10px; bottom:10px; height:118px; padding:12px; }
+      .rightzone{ display:none; }
+      .controls{ flex:3; }
+      .hero{ flex-direction: column; align-items:flex-start; }
+      .heroImg{ width: 100%; height: auto; aspect-ratio: 1/1; }
+      .heroTitle{ font-size: 26px; }
+      #miniVideoWrap{ width: 240px; height: 140px; right: 10px; bottom: 150px; }
+    }
+  </style>
+<style>
+/* Spotify-like polish overrides */
+:root{
+  --sp-bg:#121212;
+  --sp-panel:#181818;
+  --sp-panel-2:#1f1f1f;
+  --sp-text:#ffffff;
+  --sp-muted:rgba(255,255,255,.72);
+  --sp-muted2:rgba(255,255,255,.55);
+  --sp-border:rgba(255,255,255,.10);
+  --sp-green:#1db954;
+}
+body{ background:var(--sp-bg); color:var(--sp-text); }
+a,button{ -webkit-tap-highlight-color: transparent; }
+.mainArea{
+  background:
+    radial-gradient(1200px 800px at 20% -10%, rgba(29,185,84,.18), transparent 55%),
+    radial-gradient(1000px 700px at 80% 0%, rgba(255,255,255,.06), transparent 55%),
+    var(--sp-bg);
+}
+/* Sidebar */
+#sidebar.sidebarArea{
+  background:#000;
+  border-right:1px solid var(--sp-border);
+}
+#sidebar .logo{
+  font-weight: 900;
+  letter-spacing:.2px;
+}
+#sidebar .navBtn, #sidebar .nav-item, #sidebar button{
+  outline: none;
+}
+#sidebar .navActive{
+  background: rgba(255,255,255,.10) !important;
+  color:#fff !important;
+}
+/* mobile drawer behavior */
+#sidebar{
+  transition: transform .25s ease, opacity .25s ease;
+}
+@media (max-width: 768px){
+  body{ overflow-x:hidden; }
+  #sidebar{
+    position: fixed !important;
+    inset: 0 auto 0 0;
+    width: 86vw;
+    max-width: 320px;
+    z-index: 60;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  #sidebar.hidden-mode{
+    transform: translateX(-110%);
+  }
+  .sbOverlay{
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(6px);
+  }
+  .sbOverlay.hidden{ display:none; }
+}
+@media (min-width: 769px){
+  #sidebar.hidden-mode{ transform:none; }
+  .sbOverlay{ display:none !important; }
+}
+
+/* Topbar / header polish */
+header, .topbar{
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+}
+
+/* Buttons */
+.btn{
+  background: var(--sp-green) !important;
+  color: #000 !important;
+  border: none !important;
+  border-radius: 999px !important;
+  font-weight: 800 !important;
+  transition: transform .12s ease, filter .12s ease, background .12s ease;
+}
+.btn:hover{ filter: brightness(1.05); transform: scale(1.02); }
+.btn:active{ transform: scale(.99); }
+.btn:focus-visible{ outline: 2px solid rgba(29,185,84,.55); outline-offset: 2px; }
+
+/* Cards */
+.music-card, .plCard{
+  background: var(--sp-panel);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 16px;
+  padding: 14px;
+  cursor: pointer;
+  transition: transform .16s ease, background .16s ease, border-color .16s ease;
+  position: relative;
+  overflow: hidden;
+}
+.music-card:hover, .plCard:hover{
+  transform: translateY(-2px);
+  background: var(--sp-panel-2);
+  border-color: rgba(255,255,255,.10);
+}
+.music-card img, .plCard img{ border-radius: 14px; }
+
+/* Playlist card layout (if original css exists, this will enhance) */
+.plCover{ border-radius: 14px; overflow:hidden; background:#111; }
+.plMeta{ padding-top: 10px; }
+.plName{ font-weight: 900; }
+.plSub{ color: var(--sp-muted2); font-size: 12px; }
+
+/* Song rows */
+.row{
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 14px;
+  padding: 10px 12px;
+  transition: background .14s ease, transform .14s ease, border-color .14s ease;
+}
+.row:hover{
+  background: rgba(255,255,255,.07);
+  border-color: rgba(255,255,255,.10);
+  transform: translateY(-1px);
+}
+.rowTitle{ font-weight: 800; }
+.rowSub{ color: var(--sp-muted2); }
+.rowRight button{
+  width: 34px; height: 34px;
+  border-radius: 999px;
+}
+.rowRight button:hover{ background: rgba(255,255,255,.10); }
+
+/* Player bar */
+#playerBar{
+  background: rgba(0,0,0,.82) !important;
+  border-top: 1px solid rgba(255,255,255,.10) !important;
+  backdrop-filter: blur(10px);
+}
+#playerBar .playBtn{
+  background: #fff !important;
+  color:#000 !important;
+}
+#playerBar .playBtn:hover{ transform: scale(1.06); }
+#playerBar input[type="range"]{ accent-color: var(--sp-green); }
+
+/* Text */
+h1,h2,h3{ letter-spacing: -0.2px; }
+.text-gray-400{ color: var(--sp-muted2) !important; }
+.text-gray-300{ color: var(--sp-muted) !important; }
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  *{ animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+</style></head>
+<body class="flex bg-[#121212] text-white antialiased selection:bg-[#1db954]/30 selection:text-white">
+<!-- Toast -->
+<div id="toast">
+<i class="fas fa-circle-info" id="toastIcon"></i>
+<div id="toastText"><div id="toastTextInner">Ray Player siap</div></div>
+</div>
+<!-- Sidebar -->
+<aside class="flex flex-col h-screen p-5 shrink-0 sidebarArea" id="sidebar">
+<div class="flex items-center gap-3 mb-10 cursor-pointer" onclick="toggleSidebar()">
+<i class="fab fa-spotify text-3xl text-green-500"></i>
+<span class="text-xl font-extrabold tracking-tighter">RayPlayer</span>
+</div>
+<nav class="space-y-2">
+<button class="w-full flex items-center gap-4 text-gray-400 hover:text-white transition font-extrabold cursor-pointer px-3 py-2 rounded-xl hover:bg-white/5" id="navHome" onclick="goHome()">
+<i class="fas fa-house text-xl"></i> Home
+      </button>
+<button class="w-full flex items-center gap-4 text-gray-400 hover:text-white transition font-extrabold cursor-pointer px-3 py-2 rounded-xl hover:bg-white/5" id="navSearch" onclick="goSearch()">
+<i class="fas fa-search text-xl"></i> Search
+      </button>
+<button class="w-full flex items-center gap-4 text-gray-400 hover:text-white transition font-extrabold cursor-pointer px-3 py-2 rounded-xl hover:bg-white/5" id="navPlaylists" onclick="goPlaylists()">
+<i class="fas fa-music text-xl"></i> Playlist
+      </button>
+<button class="w-full flex items-center gap-4 text-gray-400 hover:text-white transition font-extrabold cursor-pointer px-3 py-2 rounded-xl hover:bg-white/5" id="navInfo" onclick="goInfo()">
+<i class="fas fa-circle-info text-xl"></i> Info
+      </button>
+</nav>
+<div class="mt-8 overflow-hidden">
+<div class="flex items-center justify-between mb-3">
+<p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Your Playlists</p>
+<button class="p-2 rounded-full hover:bg-white/10 transition" onclick="openCreatePlaylist(false)" title="Create Playlist">
+<i class="fas fa-plus text-xs text-gray-300"></i>
+</button>
+</div>
+<div class="space-y-2 overflow-y-auto max-h-[52vh] pr-1" id="sidebarPlList"></div>
+<div class="text-xs text-gray-600 mt-2 hidden" id="sidebarPlEmpty">Belum ada playlist</div>
+</div>
+</aside><div class="sbOverlay hidden" id="sbOverlay" onclick="toggleSidebar(true)"></div>
+<!-- Main -->
+<main class="flex-1 h-screen overflow-y-auto p-5 lg:p-10 mainArea bg-[#121212] p-4 md:p-6 lg:p-8">
+<!-- Top bar -->
+<header class="flex items-center gap-4 mb-10">
+<button class="p-2 hover:bg-white/10 rounded-full transition" onclick="toggleSidebar()">
+<i class="fas fa-bars"></i>
+</button>
+<div class="flex-1 max-w-xl relative" id="searchBoxWrap">
+<i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-500"></i>
+<input class="search-input w-full py-3 pl-12 pr-4 rounded-full outline-none" id="searchInput" placeholder="Cari lagu apa hari ini?" type="text"/>
+</div>
+<button class="bg-white text-black px-6 py-3 rounded-full font-extrabold hover:scale-105 transition" id="searchBtn" onclick="searchMusic()">
+        Search
+      </button>
+<!-- ✅ PWA Install button (muncul kalau beforeinstallprompt kepanggil) -->
+<button class="hidden bg-green-500 text-black px-5 py-3 rounded-full font-extrabold hover:scale-105 transition" id="installBtn" onclick="installPWA()">
+<i class="fas fa-download mr-2"></i> Install
+      </button>
+</header>
+<!-- HOME -->
+<section id="viewHome">
+<div class="flex items-end justify-between mb-6">
+<div>
+<h2 class="text-3xl font-extrabold">Home</h2>
+<div class="text-xs text-gray-400 mt-2">Random</div>
+</div>
+<button class="btn" onclick="refreshHome()"><i class="fas fa-rotate"></i> Refresh</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6" id="homeGrid"></div>
+</section>
+<!-- SEARCH -->
+<section class="hidden" id="viewSearch">
+<div class="flex items-end justify-between mb-6">
+<h2 class="text-2xl font-extrabold">Trending Music</h2>
+<div class="text-xs text-gray-400"></div>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6" id="grid"></div>
+</section>
+<!-- PLAYLIST LIST -->
+<section class="hidden" id="viewPlaylists">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-2xl font-extrabold">Koleksi Kamu</h2>
+<button class="btn" onclick="openCreatePlaylist(false)"><i class="fas fa-plus"></i> Buat Playlist</button>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6" id="plGrid"></div>
+<div class="hidden text-gray-400 text-sm py-20 text-center" id="plGridEmpty">
+        Belum ada playlist
+      </div>
+</section>
+<!-- PLAYLIST DETAIL -->
+<section class="hidden" id="viewPlaylistDetail">
+<div class="flex items-center gap-3 mb-3">
+<button class="p-2 rounded-full hover:bg-white/10 transition" onclick="goPlaylists()">
+<i class="fas fa-arrow-left"></i>
+</button>
+<div class="text-xs text-gray-400">Playlist</div>
+</div>
+<div class="hero">
+<div class="heroImg"><img alt="cover" id="dCover" src=""/></div>
+<div class="min-w-0">
+<div class="heroTitle" id="dName">Playlist</div>
+<div class="heroSub" id="dMeta">0 lagu • Rayy</div>
+<div class="heroActions">
+<button class="btn btnPrimary" onclick="playDetailStart(false)"><i class="fas fa-play"></i> Play</button>
+<button class="btn" onclick="playDetailStart(true)"><i class="fas fa-shuffle"></i> Shuffle</button>
+<button class="btn" onclick="cycleRepeatMode()"><i class="fas fa-repeat" id="repIcon"></i> Repeat</button>
+<button class="btn" onclick="toggleShuffle()"><i class="fas fa-shuffle" id="shufIcon"></i> Shuffle Mode</button>
+<button class="btn" onclick="openEditPlaylist()"><i class="fas fa-pen"></i> Edit</button>
+<button class="btn" onclick="deleteCurrentPlaylist()"><i class="fas fa-trash"></i> Hapus</button>
+</div>
+</div>
+</div>
+<div class="mt-3">
+<div class="text-xs text-gray-400 mb-3">Daftar lagu</div>
+<div class="space-y-2" id="dSongs"></div>
+<div class="hidden text-gray-500 text-sm py-16 text-center" id="dEmpty">
+          Playlist kosong
+        </div>
+</div>
+</section>
+<!-- INFO -->
+<section class="hidden" id="viewInfo">
+<div class="flex items-end justify-between mb-6">
+<div>
+<h2 class="text-2xl font-extrabold">Info</h2>
+<div class="text-xs text-gray-400 mt-2">Developer &amp; kontak</div>
+</div>
+</div>
+<div class="infoCard">
+<div class="flex items-center gap-4">
+<div class="devAvatar"><img alt="dev" id="devPhoto" src=""/></div>
+<div class="min-w-0">
+<div class="text-xl font-extrabold" id="devName">Developer</div>
+<div class="text-xs text-gray-400 mt-1" id="devBio">RayPlayer</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
+<a class="linkBtn" href="#" id="devTelegram" rel="noreferrer" target="_blank">
+<i class="fab fa-telegram text-xl text-sky-400"></i> Telegram
+          </a>
+<a class="linkBtn" href="#" id="devWhatsapp" rel="noreferrer" target="_blank">
+<i class="fab fa-whatsapp text-xl text-green-500"></i> WhatsApp
+          </a>
+<a class="linkBtn" href="#" id="devWaChannel" rel="noreferrer" target="_blank">
+<i class="fas fa-bullhorn text-xl text-emerald-400"></i> Saluran WhatsApp
+          </a>
+<a class="linkBtn" href="#" id="devTiktok" rel="noreferrer" target="_blank">
+<i class="fab fa-tiktok text-xl"></i> TikTok
+          </a>
+</div>
+</div>
+</section>
+</main>
+<!-- Mini Video Floating -->
+<div id="miniVideoWrap">
+<div id="miniTop">
+<div class="min-w-0" id="miniBadge">
+<i class="fab fa-spotify"></i>
+<div class="min-w-0" id="miniTitleWrap">
+<div class="marquee paused" id="miniTitleMarq">
+<div class="marquee-inner">
+<span id="miniTitleA">RayPlayer</span>
+<span>•</span>
+<span id="miniTitleB">RayPlayer</span>
+</div>
+</div>
+</div>
+</div>
+<div id="miniBtns">
+<button class="miniBtn" onclick="toggleMiniVideo(false)" title="Minimize"><i class="fas fa-minus"></i></button>
+</div>
+</div>
+<div id="miniYtHost"></div>
+</div>
+<!-- Mini Player -->
+<footer id="playerBar">
+<div class="song-info" onclick="openNowPlaying()">
+<div class="relative">
+<img class="w-12 h-12 rounded-full object-cover shadow-lg border border-white/10" id="pImg" src="">
+<div class="hidden absolute inset-0 rounded-full bg-white/10 border border-white/10 flex items-center justify-center" id="pFallback">
+<i class="fab fa-spotify text-green-500"></i>
+</div>
+</img></div>
+<div class="min-w-0 w-full">
+<div class="marquee paused" id="pTitleWrap">
+<div class="marquee-inner">
+<span class="text-sm font-extrabold" id="pTitle">Pilih Lagu</span>
+<span>•</span>
+<span class="text-sm font-extrabold" id="pTitleDup">Pilih Lagu</span>
+</div>
+</div>
+<div class="flex items-center gap-2 mt-1 min-w-0">
+<div class="text-xs text-gray-400 truncate" id="pArtist"></div>
+<span class="text-[10px] text-gray-500 font-mono" id="pDur"></span>
+</div>
+</div>
+</div>
+<div class="controls" onclick="event.stopPropagation()">
+<div class="flex items-center gap-6">
+<button class="icon-btn" onclick="prev()" title="Prev"><i class="fas fa-step-backward text-xl"></i></button>
+<button id="playBtn" onclick="togglePlay()" title="Play/Pause"><i class="fas fa-play ml-0.5"></i></button>
+<button class="icon-btn" onclick="next()" title="Next"><i class="fas fa-step-forward text-xl"></i></button>
+<button class="icon-btn" onclick="cycleRepeatMode()" title="Repeat"><i class="fas fa-repeat" id="miniRepIcon"></i></button>
+<button class="icon-btn" onclick="toggleShuffle()" title="Shuffle"><i class="fas fa-shuffle" id="miniShufIcon"></i></button>
+</div>
+<div class="flex items-center w-full gap-3">
+<span class="text-[10px] text-gray-400 w-10 text-right font-mono" id="curT">0:00</span>
+<div class="progress-bg flex-1" onclick="seek(event)"><div id="progressFill"></div></div>
+<span class="text-[10px] text-gray-400 w-10 font-mono" id="durT">0:00</span>
+</div>
+</div>
+<div class="rightzone" onclick="event.stopPropagation()">
+<button class="pill text-xs text-gray-200" onclick="toggleMiniVideo()" title="Mini Video">
+<i class="fas fa-tv"></i><span>Mini</span>
+</button>
+<a class="pill text-xs text-gray-200" href="#" id="openYT" rel="noreferrer" target="_blank" title="Open on YouTube">
+<i class="fab fa-youtube text-red-500"></i><span>Open</span>
+</a>
+<div class="pill">
+<i class="fas fa-volume-up text-gray-300"></i>
+<input class="w-24 accent-green-500 cursor-pointer" id="vol" max="100" min="0" step="1" type="range" value="100"/>
+</div>
+</div>
+</footer>
+<!-- Now Playing Modal -->
+<div class="modal" id="npModal" onclick="closeNowPlaying()">
+<div class="modalCard" onclick="event.stopPropagation()">
+<div class="modalHeader">
+<div class="text-sm font-extrabold text-white/90">Now Playing</div>
+<button class="p-2 rounded-full hover:bg-white/10 transition" onclick="closeNowPlaying()"><i class="fas fa-xmark"></i></button>
+</div>
+<div class="modalBody">
+<div class="npCover"><img alt="cover" id="npImg" src=""/></div>
+<div>
+<div class="npTitle" id="npTitle">Pilih Lagu</div>
+<div class="npArtist" id="npArtist"></div>
+<div class="text-[11px] text-gray-500 mt-2" id="npSource"></div>
+</div>
+<div class="flex items-center w-full gap-3">
+<span class="text-[11px] text-gray-400 w-12 text-right font-mono" id="npCur">0:00</span>
+<div class="progress-bg flex-1" onclick="npSeek(event)">
+<div id="npProgressFill" style="height:100%; width:0%; background:var(--sp-green); border-radius:999px;"></div>
+</div>
+<span class="text-[11px] text-gray-400 w-12 font-mono" id="npDur">0:00</span>
+</div>
+<div class="npControls">
+<button class="icon-btn" onclick="toggleShuffle()" title="Shuffle"><i class="fas fa-shuffle"></i></button>
+<button class="icon-btn" onclick="prev()" title="Prev"><i class="fas fa-backward-step text-xl"></i></button>
+<button class="npBigPlay" onclick="togglePlay()" title="Play/Pause"><i class="fas fa-play ml-0.5" id="npPlayIcon"></i></button>
+<button class="icon-btn" onclick="next()" title="Next"><i class="fas fa-forward-step text-xl"></i></button>
+<button class="icon-btn" onclick="cycleRepeatMode()" title="Repeat"><i class="fas fa-repeat" id="npRepIcon"></i></button>
+</div>
+<div class="flex items-center justify-between gap-3">
+<a class="pill text-xs text-gray-200" href="#" id="npOpenYT" rel="noreferrer" target="_blank">
+<i class="fab fa-youtube text-red-500"></i><span>Open</span>
+</a>
+<div class="pill">
+<i class="fas fa-volume-high text-gray-300"></i>
+<input class="w-32 accent-green-500 cursor-pointer" id="npVol" max="100" min="0" step="1" type="range" value="100"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Add to Playlist Modal -->
+<div class="modal" id="addModal" onclick="closeAddModal()">
+<div class="modalCard" onclick="event.stopPropagation()">
+<div class="modalHeader">
+<div class="text-sm font-extrabold text-white/90">Tambah ke Playlist</div>
+<button class="p-2 rounded-full hover:bg-white/10 transition" onclick="closeAddModal()"><i class="fas fa-xmark"></i></button>
+</div>
+<div class="modalBody">
+<div class="text-sm font-extrabold" id="addSongTitle">Lagu</div>
+<div class="text-xs text-gray-400 -mt-2" id="addSongSub"></div>
+<div class="space-y-2" id="addPlChoices"></div>
+<button class="btn" onclick="openCreatePlaylist(true)"><i class="fas fa-plus"></i> Buat playlist baru</button>
+</div>
+</div>
+</div>
+<!-- Create/Edit Playlist Modal -->
+<div class="modal" id="plModal" onclick="closePlModal()">
+<div class="modalCard" onclick="event.stopPropagation()">
+<div class="modalHeader">
+<div class="text-sm font-extrabold text-white/90" id="plModalTitle">Buat Playlist</div>
+<button class="p-2 rounded-full hover:bg-white/10 transition" onclick="closePlModal()"><i class="fas fa-xmark"></i></button>
+</div>
+<div class="modalBody">
+<label class="text-xs text-gray-400">Nama playlist</label>
+<input class="search-input w-full py-3 px-4 rounded-xl outline-none" id="plNameInput" placeholder="Contoh: GALAU BANGET"/>
+<label class="text-xs text-gray-400 mt-2">Cover playlist</label>
+<input accept="image/*" class="text-xs text-gray-300" id="plCoverInput" type="file"/>
+<div class="flex items-center gap-12">
+<div class="w-28 h-28 rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+<img alt="cover" class="w-full h-full object-cover" id="plCoverPreview" src=""/>
+</div>
+</div>
+<button class="btn btnPrimary justify-center" id="plSaveBtn" onclick="savePlaylistMeta()">
+<i class="fas fa-check"></i> Simpan
+        </button>
+</div>
+</div>
+</div>
+<!-- YouTube host: default hidden -->
+<div id="ytHiddenHost"><div id="ytPlayer"></div></div>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+    // ====== INFO DEV ======
+    const DEV_NAME = "Rayy";
+    const DEV_BIO  = "RayPlayer • made with ❤️";
+    const DEV_PHOTO_URL = "https://files.catbox.moe/hhbl9r.jpg";
+    const DEV_TELEGRAM = "https://t.me/RayyAckerman";
+    const DEV_WHATSAPP = "https://wa.me/6283890074416";
+    const DEV_WA_CHANNEL = "https://whatsapp.com/channel/0029Vb6kx8FFi8xZBhjm2g0m";
+    const DEV_TIKTOK = "https://www.tiktok.com/@rayysuki";
+
+    const HOME_DEFAULT_QUERY = "musik";
+    const HOME_RANDOM_PICK = 18;
+
+    const LS_PLAYLISTS = "ray_playlists_v1";
+    const LS_MODES = "ray_modes_v1";
+
+    let results = [];
+    let homeResults = [];
+    let playlists = [];
+    let currentPlaylistId = null;
+
+    let nowTrack = null;
+    let player = null;
+    let progressTimer = null;
+
+    let playContext = { type: 'results', playlistId: null, idx: null };
+    let repeatMode = 1; // 0 off, 1 all, 2 one
+    let shuffleOn = false;
+
+    let addPendingTrack = null;
+    let editingPlaylistId = null;
+    let createFromAddFlow = false;
+
+    let homeLoadedOnce = false;
+
+    // toast marquee ticker
+    let toastTicker = null;
+
+    // mini video drag state
+    let miniOn = false;
+    let draggingMini = false;
+    let dragOff = {x:0,y:0};
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    // Toast
+    function showNotif(msg, iconClass="fas fa-music"){
+      const t = document.getElementById('toast');
+      const ic = document.getElementById('toastIcon');
+      const inner = document.getElementById('toastTextInner');
+      const box = document.getElementById('toastText');
+
+      ic.className = iconClass;
+      inner.textContent = msg || "";
+      stopToastMarquee();
+
+      requestAnimationFrame(() => {
+        const overflow = inner.scrollWidth > box.clientWidth;
+        if (overflow){
+          inner.textContent = `${msg}   •   ${msg}   •   ${msg}`;
+          startToastMarquee();
+        }
+      });
+
+      t.classList.add('active');
+      setTimeout(() => t.classList.remove('active'), 2200);
+    }
+
+    function startToastMarquee(){
+      stopToastMarquee();
+      const inner = document.getElementById('toastTextInner');
+      let x = 0;
+      toastTicker = setInterval(() => {
+        x -= 1.15;
+        inner.style.transform = `translateX(${x}px)`;
+        if (Math.abs(x) > inner.scrollWidth / 3){
+          x = 0;
+          inner.style.transform = "translateX(0px)";
+        }
+      }, 16);
+    }
+
+    function stopToastMarquee(){
+      if (toastTicker) clearInterval(toastTicker);
+      toastTicker = null;
+      const inner = document.getElementById('toastTextInner');
+      inner.style.transform = "translateX(0px)";
+    }
+
+    // Sidebar
+    function toggleSidebar(forceClose=false){
+      const sb = document.getElementById('sidebar');
+      const ov = document.getElementById('sbOverlay');
+      const isMobile = window.innerWidth <= 768;
+
+      const willOpen = forceClose ? false : sb.classList.contains('hidden-mode');
+      if (forceClose){
+        sb.classList.add('hidden-mode');
+      } else {
+        sb.classList.toggle('hidden-mode');
+      }
+
+      if (isMobile && ov){
+        if (willOpen){
+          ov.classList.remove('hidden');
+          document.documentElement.classList.add('overflow-hidden');
+          document.body.classList.add('overflow-hidden');
+          // focus first interactive element for accessibility
+          const firstBtn = sb.querySelector('button, a, [tabindex]:not([tabindex="-1"])');
+          if (firstBtn) setTimeout(()=>firstBtn.focus(), 0);
+        } else {
+          ov.classList.add('hidden');
+          document.documentElement.classList.remove('overflow-hidden');
+          document.body.classList.remove('overflow-hidden');
+        }
+      }
+    }
+    // close on ESC (mobile drawer)
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Escape'){
+        const sb = document.getElementById('sidebar');
+        if (sb && window.innerWidth <= 768 && !sb.classList.contains('hidden-mode')) toggleSidebar(true);
+      }
+    });
+
+    function closeSidebarIfMobile(){
+      const sb = document.getElementById('sidebar');
+      if (sb && window.innerWidth <= 768 && !sb.classList.contains('hidden-mode')) toggleSidebar(true);
+    }
+
+    
+    window.addEventListener('resize', ()=>{
+      const ov = document.getElementById('sbOverlay');
+      const sb = document.getElementById('sidebar');
+      if (!ov || !sb) return;
+      if (window.innerWidth > 768){
+        ov.classList.add('hidden');
+        document.documentElement.classList.remove('overflow-hidden');
+        document.body.classList.remove('overflow-hidden');
+        sb.classList.remove('hidden-mode');
+      } else {
+        // keep drawer closed by default on mobile
+        if (!sb.classList.contains('hidden-mode')) sb.classList.add('hidden-mode');
+        ov.classList.add('hidden');
+        document.documentElement.classList.remove('overflow-hidden');
+        document.body.classList.remove('overflow-hidden');
+      }
+    });
+function setActiveNav(id){
+      const ids = ["navHome","navSearch","navPlaylists","navInfo"];
+      ids.forEach(x=>{
+        const el = document.getElementById(x);
+        el.classList.remove("bg-white/10","text-white");
+        el.classList.add("text-gray-400");
+      });
+      const a = document.getElementById(id);
+      a.classList.add("bg-white/10","text-white");
+      a.classList.remove("text-gray-400");
+    }
+
+    function showView(viewId){
+      ["viewHome","viewSearch","viewPlaylists","viewPlaylistDetail","viewInfo"].forEach(id=>{
+        document.getElementById(id).classList.toggle("hidden", id !== viewId);
+      });
+      const showSearchUI = (viewId === "viewSearch");
+      document.getElementById("searchBoxWrap").classList.toggle("hidden", !showSearchUI);
+      document.getElementById("searchBtn").classList.toggle("hidden", !showSearchUI);
+    }
+
+    function goHome(){ setActiveNav("navHome"); showView("viewHome"); closeSidebarIfMobile(); ensureHomeLoaded(); }
+    function goSearch(){ setActiveNav("navSearch"); showView("viewSearch"); closeSidebarIfMobile(); setTimeout(()=>document.getElementById("searchInput").focus(), 60); }
+    function goPlaylists(){ setActiveNav("navPlaylists"); showView("viewPlaylists"); closeSidebarIfMobile(); renderPlaylistsGrid(); }
+    function goInfo(){ setActiveNav("navInfo"); showView("viewInfo"); closeSidebarIfMobile(); }
+
+    // Info
+    function initInfo(){
+      document.getElementById("devName").innerText = DEV_NAME;
+      document.getElementById("devBio").innerText = DEV_BIO;
+      document.getElementById("devPhoto").src = DEV_PHOTO_URL;
+      document.getElementById("devTelegram").href = DEV_TELEGRAM;
+      document.getElementById("devWhatsapp").href = DEV_WHATSAPP;
+      document.getElementById("devWaChannel").href = DEV_WA_CHANNEL;
+      document.getElementById("devTiktok").href = DEV_TIKTOK;
+    }
+
+    // Storage
+    function saveAll(){
+      localStorage.setItem(LS_PLAYLISTS, JSON.stringify(playlists));
+      localStorage.setItem(LS_MODES, JSON.stringify({ repeatMode, shuffleOn }));
+      renderSidebarPlaylists();
+      renderPlaylistsGrid();
+      syncModeIcons();
+    }
+    function loadAll(){
+      try{ playlists = JSON.parse(localStorage.getItem(LS_PLAYLISTS) || "[]") || []; }catch{ playlists=[]; }
+      try{
+        const m = JSON.parse(localStorage.getItem(LS_MODES) || "{}") || {};
+        repeatMode = typeof m.repeatMode === "number" ? m.repeatMode : 1;
+        shuffleOn = !!m.shuffleOn;
+      }catch{}
+    }
+    function getPlaylist(pid){ return playlists.find(p=>p.id===pid) || null; }
+
+    function defaultCover(){
+      const svg = encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#1e1e1e"/>
+              <stop offset="1" stop-color="#000000"/>
+            </linearGradient>
+          </defs>
+          <rect width="600" height="600" fill="url(#g)"/>
+          <circle cx="300" cy="300" r="170" fill="rgba(255,255,255,0.06)"/>
+          <text x="300" y="322" text-anchor="middle" font-family="Arial" font-size="54" fill="rgba(255,255,255,0.28)">Ray</text>
+        </svg>
+      `);
+      return `data:image/svg+xml;charset=utf-8,${svg}`;
+    }
+
+    // Playlists UI
+    function renderSidebarPlaylists(){
+      const box = document.getElementById("sidebarPlList");
+      const empty = document.getElementById("sidebarPlEmpty");
+      empty.classList.toggle("hidden", playlists.length !== 0);
+
+      box.innerHTML = playlists.map(p => `
+        <button class="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 transition ${p.id===currentPlaylistId ? 'bg-white/10' : ''}"
+                onclick="openPlaylistDetail('${p.id}')">
+          <div class="w-10 h-10 rounded-xl overflow-hidden border border-white/10 bg-black/40 flex-none">
+            <img src="${p.coverDataUrl || defaultCover()}" class="w-full h-full object-cover" />
+          </div>
+          <div class="min-w-0 text-left">
+            <div class="text-xs font-extrabold truncate">${escapeHtml(p.name)}</div>
+            <div class="text-[10px] text-gray-500 truncate">${p.songs?.length || 0} lagu</div>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    function renderPlaylistsGrid(){
+      const grid = document.getElementById("plGrid");
+      const empty = document.getElementById("plGridEmpty");
+      empty.classList.toggle("hidden", playlists.length !== 0);
+
+      grid.innerHTML = playlists.map(p => `
+        <div class="plCard" onclick="openPlaylistDetail('${p.id}')">
+          <div class="plCover">
+            <img src="${p.coverDataUrl || defaultCover()}" />
+          </div>
+          <div class="plMeta">
+            <div class="plName truncate">${escapeHtml(p.name)}</div>
+            <div class="plSub">${p.songs?.length || 0} lagu • Rayy</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openPlaylistDetail(pid){
+      const p = getPlaylist(pid);
+      if (!p) return showNotif("Playlist tidak ditemukan", "fas fa-triangle-exclamation");
+
+      currentPlaylistId = pid;
+      setActiveNav("navPlaylists");
+      showView("viewPlaylistDetail");
+      closeSidebarIfMobile();
+
+      document.getElementById("dCover").src = p.coverDataUrl || defaultCover();
+      document.getElementById("dName").innerText = p.name;
+      document.getElementById("dMeta").innerText = `${p.songs.length} lagu • Rayy`;
+
+      renderPlaylistSongs(p);
+      renderSidebarPlaylists();
+      syncModeIcons();
+    }
+
+    function renderPlaylistSongs(p){
+      const list = document.getElementById("dSongs");
+      const empty = document.getElementById("dEmpty");
+      empty.classList.toggle("hidden", p.songs.length !== 0);
+
+      list.innerHTML = p.songs.map((t, idx) => `
+        <div class="row" onclick="playFromPlaylist('${p.id}', ${idx})">
+          <div class="rowImg"><img src="${t.thumb}" /></div>
+          <div class="rowMain">
+            <div class="rowTitle">${escapeHtml(t.title)}</div>
+            <div class="rowSub">${escapeHtml(t.author)} • ${escapeHtml(t.duration || '')}</div>
+          </div>
+          <div class="rowRight" onclick="event.stopPropagation()">
+            <span class="text-[11px] font-mono">${escapeHtml(t.duration || '')}</span>
+            <button title="Hapus dari playlist" onclick="removeSongFromPlaylist('${p.id}', ${idx})">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function removeSongFromPlaylist(pid, idx){
+      const p = getPlaylist(pid);
+      if (!p) return;
+      const removed = p.songs.splice(idx,1);
+      saveAll();
+      if (currentPlaylistId === pid) openPlaylistDetail(pid);
+      showNotif(`Hapus: ${removed[0]?.title || ''}`, "fas fa-trash");
+    }
+
+    function deleteCurrentPlaylist(){
+      if (!currentPlaylistId) return;
+      playlists = playlists.filter(x => x.id !== currentPlaylistId);
+      currentPlaylistId = null;
+      saveAll();
+      goPlaylists();
+      showNotif("Playlist dihapus", "fas fa-trash");
+    }
+
+    // Create / Edit playlist
+    function openCreatePlaylist(fromAdd){
+      createFromAddFlow = !!fromAdd;
+      editingPlaylistId = null;
+      document.getElementById("plModalTitle").innerText = "Buat Playlist";
+      document.getElementById("plNameInput").value = "";
+      document.getElementById("plCoverInput").value = "";
+      document.getElementById("plCoverPreview").src = defaultCover();
+      document.getElementById("plModal").classList.add("active");
+    }
+
+    function openEditPlaylist(){
+      if (!currentPlaylistId) return;
+      const p = getPlaylist(currentPlaylistId);
+      if (!p) return;
+      editingPlaylistId = p.id;
+      createFromAddFlow = false;
+      document.getElementById("plModalTitle").innerText = "Edit Playlist";
+      document.getElementById("plNameInput").value = p.name;
+      document.getElementById("plCoverInput").value = "";
+      document.getElementById("plCoverPreview").src = p.coverDataUrl || defaultCover();
+      document.getElementById("plModal").classList.add("active");
+    }
+
+    document.addEventListener("change", (e) => {
+      if (e.target?.id === "plCoverInput"){
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => { document.getElementById("plCoverPreview").src = reader.result; };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    function closePlModal(){ document.getElementById("plModal").classList.remove("active"); }
+
+    function savePlaylistMeta(){
+      const name = document.getElementById("plNameInput").value.trim();
+      if (!name) return showNotif("Nama playlist wajib diisi", "fas fa-triangle-exclamation");
+
+      const cover = document.getElementById("plCoverPreview").src || defaultCover();
+
+      if (editingPlaylistId){
+        const p = getPlaylist(editingPlaylistId);
+        if (!p) return;
+        p.name = name;
+        p.coverDataUrl = cover;
+        saveAll();
+        closePlModal();
+        openPlaylistDetail(p.id);
+        showNotif("Playlist diperbarui", "fas fa-pen");
+        return;
+      }
+
+      const id = "pl_" + Math.random().toString(36).slice(2,10);
+      playlists.unshift({ id, name, coverDataUrl: cover, createdAt: Date.now(), songs: [] });
+      saveAll();
+      closePlModal();
+      showNotif("Playlist dibuat", "fas fa-check");
+
+      if (createFromAddFlow){
+        openAddModal(addPendingTrack);
+      } else {
+        goPlaylists();
+      }
+    }
+
+    // Add to playlist modal
+    function openAddModal(track){
+      if (!track) return;
+      addPendingTrack = track;
+
+      document.getElementById("addSongTitle").innerText = track.title || "Lagu";
+      document.getElementById("addSongSub").innerText = `${track.author || 'YouTube'} • ${track.duration || ''}`;
+
+      const box = document.getElementById("addPlChoices");
+      if (!playlists.length){
+        box.innerHTML = `<div class="text-sm text-gray-400">Belum ada playlist</div>`;
+      } else {
+        box.innerHTML = playlists.map(p => {
+          const exists = p.songs.some(s=>s.id===track.id);
+          return `
+            <button class="row" onclick="addTrackToPlaylist('${p.id}')">
+              <div class="rowImg"><img src="${p.coverDataUrl || defaultCover()}" /></div>
+              <div class="rowMain">
+                <div class="rowTitle">${escapeHtml(p.name)}</div>
+                <div class="rowSub">${p.songs.length} lagu</div>
+              </div>
+              <div class="rowRight">
+                <span class="text-[11px] ${exists ? 'text-green-500' : 'text-gray-400'}">${exists ? 'Ada' : 'Tambah'}</span>
+                <i class="fas ${exists ? 'fa-check' : 'fa-plus'}"></i>
+              </div>
+            </button>
+          `;
+        }).join('');
+      }
+
+      document.getElementById("addModal").classList.add("active");
+    }
+    function closeAddModal(){ document.getElementById("addModal").classList.remove("active"); }
+
+    function addTrackToPlaylist(pid){
+      const p = getPlaylist(pid);
+      if (!p || !addPendingTrack) return;
+      const exists = p.songs.some(s=>s.id===addPendingTrack.id);
+      if (exists) return showNotif("Lagu sudah ada di playlist", "fas fa-circle-info");
+      p.songs.push(addPendingTrack);
+      saveAll();
+      showNotif("Ditambahkan ke playlist", "fas fa-plus");
+      openAddModal(addPendingTrack);
+      if (currentPlaylistId === pid && !document.getElementById("viewPlaylistDetail").classList.contains("hidden")){
+        openPlaylistDetail(pid);
+      }
+    }
+
+    // Card title marquee HTML
+    function titleMarqueeHTML(text){
+      const safe = escapeHtml(text || "Untitled");
+      return `
+        <div class="card-title-wrap marquee paused" data-marq="1">
+          <div class="marquee-inner">
+            <span>${safe}</span><span>•</span><span>${safe}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function enableMarqueeIfNeeded(rootEl){
+      const nodes = rootEl.querySelectorAll?.('[data-marq="1"]') || [];
+      nodes.forEach(wrap => {
+        const inner = wrap.querySelector('.marquee-inner');
+        if (!inner) return;
+        const needs = inner.scrollWidth > wrap.clientWidth + 30;
+        wrap.classList.toggle('paused', !needs);
+      });
+    }
+
+    // Search
+    async function searchMusic(){
+      const q = document.getElementById('searchInput').value.trim();
+      if(!q) return showNotif("Tulis judul dulu", "fas fa-triangle-exclamation");
+
+      const grid = document.getElementById('grid');
+      grid.innerHTML = `<div class="col-span-full text-center py-20"><i class="fas fa-spinner fa-spin text-4xl text-green-500"></i></div>`;
+
+      try{
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error("Bad response");
+        results = data;
+        renderResults();
+      }catch(e){
+        console.error(e);
+        showNotif("Gagal mencari lagu", "fas fa-triangle-exclamation");
+      }
+    }
+
+    function renderResults(){
+      const grid = document.getElementById('grid');
+      if(!results.length){
+        grid.innerHTML = `<div class="col-span-full text-center py-20 text-gray-400">Tidak ada hasil</div>`;
+        return;
+      }
+
+      grid.innerHTML = results.map((t, i) => `
+        <div class="music-card group" onclick="playFromResults(${i})">
+          <button class="card-plus" title="Tambah ke Playlist" onclick="event.stopPropagation(); openAddModal(results[${i}]);">
+            <i class="fas fa-plus"></i>
+          </button>
+          <div class="relative mb-3">
+            <img src="${t.thumb}" class="w-full aspect-square object-cover rounded-xl shadow-lg">
+            <div class="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition flex items-center justify-center rounded-xl">
+              <div class="w-11 h-11 bg-green-500 rounded-full flex items-center justify-center shadow-xl">
+                <i class="fas fa-play text-black"></i>
+              </div>
+            </div>
+          </div>
+
+          ${titleMarqueeHTML(t.title)}
+
+          <div class="flex items-center justify-between gap-2 mt-2">
+            <div class="text-xs text-gray-400 truncate">${escapeHtml(t.author)}</div>
+            <div class="text-[10px] text-gray-500 font-mono">${escapeHtml(t.duration || "")}</div>
+          </div>
+        </div>
+      `).join('');
+
+      enableMarqueeIfNeeded(grid);
+    }
+
+    // Home random
+    function pickRandom(arr, n){
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy.slice(0, n);
+    }
+
+    async function ensureHomeLoaded(){
+      if (homeLoadedOnce) return;
+      homeLoadedOnce = true;
+      await loadHomeRandom();
+    }
+
+    async function refreshHome(){
+      homeLoadedOnce = false;
+      const homeGrid = document.getElementById("homeGrid");
+      homeGrid.innerHTML = `<div class="col-span-full text-center py-20"><i class="fas fa-spinner fa-spin text-4xl text-green-500"></i></div>`;
+      await ensureHomeLoaded();
+    }
+
+    async function loadHomeRandom(){
+      const homeGrid = document.getElementById("homeGrid");
+      try{
+        const res = await fetch(`/api/search?q=${encodeURIComponent(HOME_DEFAULT_QUERY)}`);
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error("Bad response");
+        homeResults = pickRandom(data, HOME_RANDOM_PICK);
+
+        homeGrid.innerHTML = homeResults.map((t, i) => `
+          <div class="music-card group" onclick="playFromHome(${i})">
+            <button class="card-plus" title="Tambah ke Playlist" onclick="event.stopPropagation(); openAddModal(homeResults[${i}]);">
+              <i class="fas fa-plus"></i>
+            </button>
+
+            <div class="relative mb-3">
+              <img src="${t.thumb}" class="w-full aspect-square object-cover rounded-xl shadow-lg">
+              <div class="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition flex items-center justify-center rounded-xl">
+                <div class="w-11 h-11 bg-green-500 rounded-full flex items-center justify-center shadow-xl">
+                  <i class="fas fa-play text-black"></i>
+                </div>
+              </div>
+            </div>
+
+            ${titleMarqueeHTML(t.title)}
+
+            <div class="flex items-center justify-between gap-2 mt-2">
+              <div class="text-xs text-gray-400 truncate">${escapeHtml(t.author)}</div>
+              <div class="text-[10px] text-gray-500 font-mono">${escapeHtml(t.duration || "")}</div>
+            </div>
+          </div>
+        `).join('');
+
+        enableMarqueeIfNeeded(homeGrid);
+      }catch(e){
+        console.error(e);
+        homeGrid.innerHTML = `<div class="col-span-full text-center py-20 text-gray-400">Gagal load rekomendasi</div>`;
+      }
+    }
+
+    function playFromHome(i){
+      const t = homeResults[i];
+      if (!t) return;
+      playContext = { type: 'results', playlistId: null, idx: null };
+      startTrack(t, null);
+    }
+
+    // ===== YouTube IFrame =====
+    function onYouTubeIframeAPIReady(){
+      player = new YT.Player('ytPlayer', {
+        height: '100%', width: '100%', videoId: '',
+        playerVars: {
+          autoplay: 0,
+          controls: 1,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1
+        },
+        events: { onReady: onPlayerReady, onStateChange: onPlayerStateChange }
+      });
+    }
+
+    function onPlayerReady(){
+      // volume sync
+      document.getElementById('vol').addEventListener('input', (e) => player?.setVolume(Number(e.target.value)));
+      document.getElementById('npVol').addEventListener('input', (e) => {
+        const v = Number(e.target.value);
+        player?.setVolume(v);
+        document.getElementById('vol').value = String(v);
+      });
+
+      renderSidebarPlaylists();
+      syncModeIcons();
+      showNotif("Player siap", "fas fa-circle-check");
+    }
+
+    function onPlayerStateChange(e){
+      if (e.data === YT.PlayerState.PLAYING){
+        updatePlayIcons(true);
+        startProgress();
+        setMediaSessionPlaybackState('playing');
+      } else if (e.data === YT.PlayerState.PAUSED){
+        updatePlayIcons(false);
+        setMediaSessionPlaybackState('paused');
+      } else if (e.data === YT.PlayerState.ENDED){
+        handleEnded();
+      }
+    }
+
+    function playFromResults(i){
+      const t = results[i];
+      if (!t) return;
+      playContext = { type: 'results', playlistId: null, idx: null };
+      startTrack(t, null);
+    }
+
+    function playFromPlaylist(pid, idx){
+      const p = getPlaylist(pid);
+      if (!p) return;
+      const t = p.songs[idx];
+      if (!t) return;
+      playContext = { type: 'playlist', playlistId: pid, idx };
+      startTrack(t, idx);
+    }
+
+    function playDetailStart(shuffle){
+      const p = getPlaylist(currentPlaylistId);
+      if (!p || !p.songs.length) return showNotif("Playlist kosong", "fas fa-circle-info");
+
+      playContext = { type: 'playlist', playlistId: p.id, idx: 0 };
+      if (shuffle){
+        const r = Math.floor(Math.random() * p.songs.length);
+        playContext.idx = r;
+        startTrack(p.songs[r], r);
+      } else startTrack(p.songs[0], 0);
+    }
+
+    function startTrack(t, idxInPlaylist){
+      if (!player) return showNotif("Player belum siap", "fas fa-circle-info");
+      nowTrack = t;
+
+      document.getElementById('playerBar').classList.add('active');
+
+      const pImg = document.getElementById('pImg');
+      const fb = document.getElementById('pFallback');
+      if (t.thumb){
+        pImg.src = t.thumb;
+        fb.classList.add('hidden');
+      } else {
+        pImg.src = '';
+        fb.classList.remove('hidden');
+      }
+
+      setMarquee(t.title || 'Untitled');
+      document.getElementById('pArtist').innerText = t.author || 'YouTube';
+      document.getElementById('pDur').innerText = t.duration ? `• ${t.duration}` : '';
+      document.getElementById('openYT').href = t.url || `https://www.youtube.com/watch?v=${t.id}`;
+
+      document.getElementById('npImg').src = t.thumb || '';
+      document.getElementById('npTitle').innerText = t.title || 'Untitled';
+      document.getElementById('npArtist').innerText = t.author || 'YouTube';
+      document.getElementById('npOpenYT').href = t.url || `https://www.youtube.com/watch?v=${t.id}`;
+
+      const srcTxt = playContext.type === "playlist"
+        ? `From playlist: ${(getPlaylist(playContext.playlistId)?.name || '-')}`
+        : "From search/home";
+      document.getElementById("npSource").innerText = srcTxt;
+
+      setMiniTitle(t.title || "RayPlayer");
+
+      document.getElementById('playBtn').innerHTML = '<i class="fas fa-circle-notch fa-spin text-lg"></i>';
+      document.getElementById('npPlayIcon').className = 'fas fa-circle-notch fa-spin';
+
+      player.loadVideoById(t.id);
+      player.setVolume(Number(document.getElementById('vol').value));
+
+      if (playContext.type === 'playlist' && typeof idxInPlaylist === "number") playContext.idx = idxInPlaylist;
+
+      syncModeIcons();
+      setMediaSessionMetadata(t);
+      setMediaSessionPlaybackState('playing');
+
+      showNotif(`Play: ${t.title || "Video"}`, "fas fa-play");
+    }
+
+    function handleEnded(){
+      if (repeatMode === 2){
+        player.playVideo();
+        return;
+      }
+
+      if (playContext.type === 'playlist'){
+        const p = getPlaylist(playContext.playlistId);
+        if (!p || !p.songs.length) return;
+
+        if (shuffleOn){
+          const r = Math.floor(Math.random() * p.songs.length);
+          playContext.idx = r;
+          startTrack(p.songs[r], r);
+          return;
+        }
+
+        const cur = typeof playContext.idx === "number" ? playContext.idx : p.songs.findIndex(x=>x.id===nowTrack.id);
+        const nxt = cur + 1;
+
+        if (nxt < p.songs.length){
+          playContext.idx = nxt;
+          startTrack(p.songs[nxt], nxt);
+        } else {
+          if (repeatMode === 1){
+            playContext.idx = 0;
+            startTrack(p.songs[0], 0);
+          } else updatePlayIcons(false);
+        }
+        return;
+      }
+
+      const pool = results.length ? results : homeResults;
+      if (!pool.length) return;
+
+      if (shuffleOn){
+        const r = Math.floor(Math.random() * pool.length);
+        startTrack(pool[r], null);
+        return;
+      }
+
+      const cur = pool.findIndex(x=>x.id===nowTrack.id);
+      const nxt = cur + 1;
+      if (nxt < pool.length) startTrack(pool[nxt], null);
+      else if (repeatMode === 1) startTrack(pool[0], null);
+    }
+
+    function next(){ if (!nowTrack) return; handleEnded(); }
+    function prev(){
+      if (!nowTrack) return;
+
+      if (playContext.type === 'playlist'){
+        const p = getPlaylist(playContext.playlistId);
+        if (!p || !p.songs.length) return;
+
+        if (shuffleOn){
+          const r = Math.floor(Math.random() * p.songs.length);
+          playContext.idx = r;
+          startTrack(p.songs[r], r);
+          return;
+        }
+
+        const cur = typeof playContext.idx === "number" ? playContext.idx : p.songs.findIndex(x=>x.id===nowTrack.id);
+        const prv = cur - 1;
+
+        if (prv >= 0){
+          playContext.idx = prv;
+          startTrack(p.songs[prv], prv);
+        } else if (repeatMode === 1){
+          const last = p.songs.length - 1;
+          playContext.idx = last;
+          startTrack(p.songs[last], last);
+        } else showNotif("Ini lagu pertama", "fas fa-circle-info");
+        return;
+      }
+
+      const pool = results.length ? results : homeResults;
+      if (!pool.length) return;
+
+      if (shuffleOn){
+        const r = Math.floor(Math.random() * pool.length);
+        startTrack(pool[r], null);
+        return;
+      }
+
+      const cur = pool.findIndex(x=>x.id===nowTrack.id);
+      const prv = cur - 1;
+      if (prv >= 0) startTrack(pool[prv], null);
+      else if (repeatMode === 1) startTrack(pool[pool.length-1], null);
+    }
+
+    function togglePlay(){
+      if(!player) return;
+      const st = player.getPlayerState();
+      if (st === YT.PlayerState.PLAYING) player.pauseVideo();
+      else player.playVideo();
+    }
+
+    function updatePlayIcons(isPlaying){
+      document.getElementById('playBtn').innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play ml-0.5"></i>';
+      document.getElementById('npPlayIcon').className = isPlaying ? 'fas fa-pause' : 'fas fa-play ml-0.5';
+    }
+
+    // modes
+    function toggleShuffle(){
+      shuffleOn = !shuffleOn;
+      saveAll();
+      showNotif(shuffleOn ? "Shuffle ON" : "Shuffle OFF", "fas fa-shuffle");
+    }
+
+    function cycleRepeatMode(){
+      repeatMode = (repeatMode + 1) % 3;
+      saveAll();
+      const txt = repeatMode===0 ? "Repeat OFF" : repeatMode===1 ? "Repeat ALL" : "Repeat ONE";
+      showNotif(txt, "fas fa-repeat");
+    }
+
+    function syncModeIcons(){
+      const repClass = (repeatMode === 2) ? "fas fa-repeat-1" : "fas fa-repeat";
+      ["miniRepIcon","npRepIcon","repIcon"].forEach(id=>{
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = repClass;
+        el.classList.toggle("text-green-500", repeatMode !== 0);
+        el.classList.toggle("text-gray-400", repeatMode === 0);
+      });
+
+      ["miniShufIcon","shufIcon"].forEach(id=>{
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle("text-green-500", shuffleOn);
+        el.classList.toggle("text-gray-400", !shuffleOn);
+      });
+    }
+
+    // progress
+    function startProgress(){
+      stopProgress();
+      progressTimer = setInterval(() => {
+        if(!player) return;
+        const dur = player.getDuration?.() || 0;
+        const cur = player.getCurrentTime?.() || 0;
+
+        document.getElementById('curT').innerText = fmt(cur);
+        document.getElementById('durT').innerText = fmt(dur);
+        document.getElementById('progressFill').style.width = (dur ? (cur/dur)*100 : 0) + '%';
+
+        document.getElementById('npCur').innerText = fmt(cur);
+        document.getElementById('npDur').innerText = fmt(dur);
+        document.getElementById('npProgressFill').style.width = (dur ? (cur/dur)*100 : 0) + '%';
+      }, 350);
+    }
+    function stopProgress(){ if(progressTimer) clearInterval(progressTimer); progressTimer = null; }
+
+    function seek(e){
+      if(!player) return;
+      const dur = player.getDuration?.() || 0;
+      if(!dur) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      player.seekTo(Math.max(0, Math.min(dur, pct * dur)), true);
+    }
+    function npSeek(e){ seek(e); }
+
+    function fmt(s){
+      if(!s || !isFinite(s)) return "0:00";
+      const m = Math.floor(s/60), sc = Math.floor(s%60);
+      return `${m}:${sc < 10 ? '0' : ''}${sc}`;
+    }
+
+    // Now Playing modal
+    function openNowPlaying(){ if (!nowTrack) return; document.getElementById('npModal').classList.add('active'); }
+    function closeNowPlaying(){ document.getElementById('npModal').classList.remove('active'); }
+
+    // Player title marquee (mini bar)
+    function setMarquee(text){
+      const wrap = document.getElementById('pTitleWrap');
+      const main = document.getElementById('pTitle');
+      const dup  = document.getElementById('pTitleDup');
+      main.textContent = text || 'Pilih Lagu';
+      dup.textContent = text || 'Pilih Lagu';
+      requestAnimationFrame(() => {
+        const needs = (wrap.scrollWidth > wrap.clientWidth + 40);
+        wrap.classList.toggle('paused', !needs);
+      });
+    }
+
+    function setMiniTitle(text){
+      const a = document.getElementById('miniTitleA');
+      const b = document.getElementById('miniTitleB');
+      a.textContent = text || "RayPlayer";
+      b.textContent = text || "RayPlayer";
+      const wrap = document.getElementById('miniTitleMarq');
+      requestAnimationFrame(() => {
+        const needs = (wrap.scrollWidth > wrap.clientWidth + 40);
+        wrap.classList.toggle('paused', !needs);
+      });
+    }
+
+    // ===== Mini Video: move the iframe between hidden host and floating host =====
+    function toggleMiniVideo(force){
+      const wrap = document.getElementById("miniVideoWrap");
+      const host = document.getElementById("miniYtHost");
+      const hiddenHost = document.getElementById("ytHiddenHost");
+
+      const nextState = (typeof force === "boolean") ? force : !miniOn;
+      miniOn = nextState;
+
+      if (!player) {
+        showNotif("Player belum siap", "fas fa-circle-info");
+        miniOn = false;
+        return;
+      }
+
+      const iframe = player.getIframe?.();
+      if (!iframe) return;
+
+      if (miniOn){
+        wrap.classList.add("active");
+        host.appendChild(iframe);
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        iframe.style.border = "0";
+      } else {
+        wrap.classList.remove("active");
+        hiddenHost.appendChild(iframe);
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        iframe.style.border = "0";
+      }
+    }
+
+    // Drag mini window
+    function initMiniDrag(){
+      const wrap = document.getElementById("miniVideoWrap");
+      const top = document.getElementById("miniTop");
+      if (!wrap || !top) return;
+
+      top.addEventListener("pointerdown", (e) => {
+        draggingMini = true;
+        const rect = wrap.getBoundingClientRect();
+        dragOff.x = e.clientX - rect.left;
+        dragOff.y = e.clientY - rect.top;
+        top.setPointerCapture(e.pointerId);
+      });
+
+      top.addEventListener("pointermove", (e) => {
+        if (!draggingMini) return;
+        const x = Math.max(8, Math.min(window.innerWidth - wrap.offsetWidth - 8, e.clientX - dragOff.x));
+        const y = Math.max(8, Math.min(window.innerHeight - wrap.offsetHeight - 8, e.clientY - dragOff.y));
+        wrap.style.left = x + "px";
+        wrap.style.top = y + "px";
+        wrap.style.right = "auto";
+        wrap.style.bottom = "auto";
+      });
+
+      top.addEventListener("pointerup", (e) => {
+        draggingMini = false;
+        try{ top.releasePointerCapture(e.pointerId); }catch(_){}
+      });
+    }
+
+    // Media Session
+    function setMediaSessionMetadata(track){
+      if (!('mediaSession' in navigator) || !track) return;
+      try{
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.title || 'RayPlayer',
+          artist: track.author || 'YouTube',
+          album: 'RayPlayer',
+          artwork: [{ src: track.thumb || '', sizes: '512x512', type: 'image/jpeg' }]
+        });
+        navigator.mediaSession.setActionHandler('play', () => player?.playVideo());
+        navigator.mediaSession.setActionHandler('pause', () => player?.pauseVideo());
+        navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+        navigator.mediaSession.setActionHandler('nexttrack', () => next());
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (!player || !details || typeof details.seekTime !== 'number') return;
+          player.seekTo(details.seekTime, true);
+        });
+      }catch(_){}
+    }
+    function setMediaSessionPlaybackState(state){
+      if (!('mediaSession' in navigator)) return;
+      try{ navigator.mediaSession.playbackState = state; }catch(_){}
+    }
+
+    // Keyboard
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+      if (e.code === 'ArrowRight') next();
+      if (e.code === 'ArrowLeft') prev();
+      if (e.code === 'KeyR') cycleRepeatMode();
+      if (e.code === 'KeyS') toggleShuffle();
+      if (e.code === 'KeyM') toggleMiniVideo();
+      if (e.code === 'Escape'){ closeNowPlaying(); closeAddModal(); closePlModal(); }
+    });
+
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if(e.key === 'Enter') searchMusic();
+    });
+
+    // Sidebar auto close outside
+    document.addEventListener("click", (e) => {
+      const sb = document.getElementById("sidebar");
+      if (window.innerWidth > 768) return;
+      if (sb.classList.contains("hidden-mode")) return;
+
+      const clickedInsideSidebar = sb.contains(e.target);
+      const clickedHamburger = !!(e.target.closest && e.target.closest("button") && e.target.closest("button").innerHTML.includes("fa-bars"));
+      if (!clickedInsideSidebar && !clickedHamburger){
+        sb.classList.add("hidden-mode");
+      }
+    });
+
+    // =========================
+    // ✅ PWA: SW + Install flow
+    // =========================
+    let deferredInstallPrompt = null;
+
+    async function registerSW(){
+      if (!('serviceWorker' in navigator)) return;
+
+      try{
+        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed') {
+              if (navigator.serviceWorker.controller) {
+                showNotif("Update tersedia. Refresh biar versi baru kepake.", "fas fa-wand-magic-sparkles");
+              }
+            }
+          });
+        });
+      }catch(e){
+        console.warn('SW register failed', e);
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+
+      const btn = document.getElementById('installBtn');
+      if (btn) btn.classList.remove('hidden');
+
+      showNotif("Bisa di-install jadi aplikasi ✅", "fas fa-download");
+    });
+
+    async function installPWA(){
+      const btn = document.getElementById('installBtn');
+
+      if (!deferredInstallPrompt){
+        showNotif("Kalau iPhone: Share → Add to Home Screen", "fas fa-circle-info");
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+
+      if (choice?.outcome === 'accepted'){
+        showNotif("Mantap! Installing...", "fas fa-circle-check");
+        if (btn) btn.classList.add('hidden');
+      } else {
+        showNotif("Install dibatalin", "fas fa-circle-info");
+      }
+
+      deferredInstallPrompt = null;
+    }
+
+    window.addEventListener('appinstalled', () => {
+      showNotif("Ray Player udah ke-install 🎉", "fas fa-circle-check");
+      const btn = document.getElementById('installBtn');
+      if (btn) btn.classList.add('hidden');
+    });
+
+    // Boot
+    window.addEventListener("load", async () => {
+      initInfo();
+      loadAll();
+      renderSidebarPlaylists();
+      syncModeIcons();
+      initMiniDrag();
+      closeSidebarIfMobile();
+
+      await refreshHome();
+      goHome();
+
+      await registerSW();
+
+      showNotif("Ray Player siap", "fas fa-circle-info");
+    });
+  </script>
+</body>
+</html>
