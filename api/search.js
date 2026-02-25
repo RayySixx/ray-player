@@ -5,6 +5,16 @@ const yts = require("yt-search");
  * Return: [{ id, url, title, thumb, author, duration }]
  */
 module.exports = async (req, res) => {
+  // Tambahin 3 baris ini buat ngakalin CORS di Android WebView!
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Kalau ada preflight request (OPTIONS), langsung return OK
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   const q = (req.query?.q ? String(req.query.q) : "").trim();
   if (!q) return res.status(400).json({ error: "Query required" });
 
